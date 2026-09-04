@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>대입 상담 · 유사 사례 검색</title>
+<link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+
+<header><div class="in">
+  <h1>대입 상담 · 유사 사례 검색</h1>
+  <span class="hd-status" id="hd-status">불러오는 중…</span>
+  <button class="ghost" id="btn-data">데이터 관리</button>
+</div></header>
+
+<!-- ── 데이터 불러오기 ─────────────────────────────── -->
+<section id="setup" class="hidden">
+  <div class="setup-box">
+    <h2>데이터 불러오기</h2>
+    <p class="lead">
+      선택한 엑셀은 <b>이 브라우저 안에서만</b> 읽고 저장됩니다. 서버로 전송되지 않고, 저장소에도 올라가지 않습니다.
+      한 번 불러오면 다음 접속부터 자동으로 열립니다.
+    </p>
+
+    <div class="src">
+      <div class="src-h"><b>1. 5개년 지원결과</b> <span class="req">필수</span></div>
+      <div class="src-d">『○개년 대입 수시 정시 학생별 지원결과』 파일. 학년도별 수시·정시 시트가 들어 있는 엑셀입니다.</div>
+      <div class="src-s" id="ds-history">확인 중…</div>
+      <label class="filebtn">파일 선택<input type="file" id="f-history" accept=".xlsx,.xls"></label>
+    </div>
+
+    <div class="src">
+      <div class="src-h"><b>2. 현 3학년 학생부성적표</b> <span class="opt">선택</span></div>
+      <div class="src-d">『○년 학생부성적표』 파일. 넣으면 학급·이름으로 학생을 골라 바로 분석할 수 있습니다. 없으면 내신을 직접 입력해 사용합니다.</div>
+      <div class="src-s" id="ds-roster">확인 중…</div>
+      <label class="filebtn">파일 선택<input type="file" id="f-roster" accept=".xlsx,.xls"></label>
+    </div>
+
+    <div class="setup-status" id="setup-status"></div>
+
+    <div class="setup-foot">
+      <button class="btn hidden" id="btn-close-setup">상담 화면으로</button>
+      <button class="ghost danger" id="btn-clear">저장된 데이터 지우기</button>
+    </div>
+    <p class="fine">학생 실명이 포함된 파일을 다룹니다. 공용 PC에서 사용했다면 자리를 뜨기 전에 「저장된 데이터 지우기」를 눌러 주세요.</p>
+  </div>
+</section>
+
+<!-- ── 상담 화면 ───────────────────────────────────── -->
+<div class="layout hidden" id="app">
+
+<aside>
+  <div class="card" id="picker">
+    <h2>학생 선택</h2>
+    <div class="f">
+      <div class="row2" style="margin-bottom:8px">
+        <select id="cls"></select>
+        <select id="stu"></select>
+      </div>
+      <input type="search" id="q" placeholder="이름으로 찾기">
+    </div>
+    <div id="stucard" class="stubox hidden"></div>
+  </div>
+
+  <div class="card">
+    <h2>성적 조건</h2>
+
+    <div class="f gpa-in">
+      <label>내신 전교과 <span class="req-mark">*</span> <span id="gpanote" class="gpanote"></span></label>
+      <input type="number" id="gpa" step="0.01" min="1" max="9" placeholder="3.45">
+    </div>
+
+    <div class="f">
+      <label>수능 / 모의고사 등급 <span class="wn">(선택)</span></label>
+      <div class="sg">
+        <div><label>국</label><input type="number" id="c_k" min="1" max="9" step="1"></div>
+        <div><label>수</label><input type="number" id="c_m" min="1" max="9" step="1"></div>
+        <div><label>영</label><input type="number" id="c_e" min="1" max="9" step="1"></div>
+        <div><label>탐1</label><input type="number" id="c_s1" min="1" max="9" step="1"></div>
+        <div><label>탐2</label><input type="number" id="c_s2" min="1" max="9" step="1"></div>
+      </div>
+    </div>
+
+    <div class="f">
+      <label>희망 계열</label>
+      <div class="chips" id="gychips">
+        <button class="chip" data-gy="-1" aria-pressed="true">전체</button>
+        <button class="chip" data-gy="0" aria-pressed="false">인문사회</button>
+        <button class="chip" data-gy="1" aria-pressed="false">자연공학</button>
+        <button class="chip" data-gy="2" aria-pressed="false">의약보건</button>
+        <button class="chip" data-gy="3" aria-pressed="false">예체능</button>
+      </div>
+    </div>
+
+    <div class="f">
+      <label>지원 유형</label>
+      <div class="chips" id="catchips">
+        <button class="chip" data-cat="0" aria-pressed="true">4년제만</button>
+        <button class="chip" data-cat="-1" aria-pressed="false">전문대 포함</button>
+      </div>
+    </div>
+
+    <div class="row2 f">
+      <div><label>유사 학생 수</label>
+        <select id="topn"><option>10</option><option>15</option><option selected>20</option><option>30</option><option>50</option></select></div>
+      <div><label>대상 연도</label>
+        <select id="yrs"><option value="3">최근 3개년</option><option value="5" selected>최근 5개년</option><option value="6">6개년 전체</option></select></div>
+    </div>
+
+    <button class="btn" id="go">유사 사례 찾기</button>
+    <div class="live"><input type="checkbox" id="autorun" checked><label for="autorun">입력하면 자동으로 다시 계산</label></div>
+  </div>
+
+  <div class="card">
+    <h2>참고 · 전체 기준</h2>
+    <div class="mut lh" id="baseline"></div>
+  </div>
+</aside>
+
+<main>
+  <div id="results" class="hidden">
+    <div class="stats" id="stats"></div>
+    <div id="headline"></div>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-t="stu" aria-selected="true">유사 학생<span class="c" id="c-stu"></span></button>
+      <button class="tab" role="tab" data-t="univ" aria-selected="false">대학·전형<span class="c" id="c-univ"></span></button>
+      <button class="tab" role="tab" data-t="track" aria-selected="false">카드 배분</button>
+      <button class="tab" role="tab" data-t="jg" aria-selected="false">정시<span class="c" id="c-jg"></span></button>
+    </div>
+    <div id="p-stu"></div>
+    <div id="p-univ" class="hidden"></div>
+    <div id="p-track" class="hidden"></div>
+    <div id="p-jg" class="hidden"></div>
+  </div>
+
+  <div class="empty" id="placeholder">
+    왼쪽에서 <b>학생을 선택</b>하면 성적이 비슷했던 과거 학생들의 지원 결과가 여기에 표시됩니다.<br>
+    <span class="fine">명단에 없으면 내신 전교과를 직접 입력해도 됩니다. 수능·모의 등급을 함께 넣으면 성적대가 더 정확히 맞춰집니다.</span>
+  </div>
+</main>
+
+</div>
+
+<script src="./vendor/xlsx.full.min.js"></script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
