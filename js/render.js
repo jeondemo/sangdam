@@ -9,7 +9,13 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 export function csatStr(c) {
   if (!c) return '<span style="opacity:.6">수능 기록 없음</span>';
   const f = x => (x == null || x <= 0 ? '·' : x);
-  return `수능 ${f(c.k)}·${f(c.m)}·${f(c.e)}·${f(c.s1)}·${f(c.s2)}`;
+  const 등급 = `수능 ${f(c.k)}·${f(c.m)}·${f(c.e)}·${f(c.s1)}·${f(c.s2)}`;
+  const p = [c.pk, c.pm, c.ps1, c.ps2];
+  if (!p.some(x => x != null)) return 등급;
+  const q = x => (x == null ? '·' : Math.round(x));
+  /* 영어는 절대평가라 백분위가 없습니다. 자리를 비워 국·수·영·탐1·탐2 순서를 맞춥니다. */
+  return `${등급} <span class="pct" title="백분위 국·수·영·탐1·탐2 — 영어는 절대평가라 백분위가 없습니다">`
+    + `(${q(c.pk)}·${q(c.pm)}·—·${q(c.ps1)}·${q(c.ps2)})</span>`;
 }
 
 const resTag = a => {
@@ -26,10 +32,14 @@ const minTag = a => {
   return '';
 };
 
+/* 예비번호를 받았지만 호명되지 못한 경우. 추합 컷을 가늠하는 근거가 됩니다. */
+const waitTag = a => (a.res === '불합' && a.wait)
+  ? `<span class="tag t-cut">예비 ${esc(a.wait)}</span>` : '';
+
 const appRow = a => `<div class="app">
   <span class="tk">${esc(a.ph === 1 ? (a.grp || '정시') : (a.track || ''))}</span>
   <span class="nm"><span class="un">${esc(a.univ)}</span><span class="dp">${esc(a.dept || '')}</span></span>
-  <span class="rt">${minTag(a)}${resTag(a)}</span></div>`;
+  <span class="rt">${minTag(a)}${waitTag(a)}${resTag(a)}</span></div>`;
 
 /* ── 학생 카드 (좌측) ────────────────────────────────── */
 

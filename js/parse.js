@@ -103,7 +103,9 @@ function buildHeader(rows) {
   const r5 = rows[4] || [];
   const cols = [];
   for (let i = 0; i < width; i++) {
-    const base = (clean(r5[i]) || '').replace(/\n/g, '');
+    /* 원본 머리글에 줄바꿈이 섞여 있습니다(예: "예비\n번호").
+       공백을 모두 없애야 '예비번호'로 찾을 수 있습니다. */
+    const base = (clean(r5[i]) || '').replace(/\s+/g, '');
     const top = g3[i];
     const mid = g4[i] || '';
     if (top === '내신') cols.push(`내신_${mid}_${base}`);
