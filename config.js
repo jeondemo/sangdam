@@ -10,8 +10,7 @@
    ※ 열쇠(교사용키·관리자키)는 이 파일에 넣지 마세요. 스프레드시트에만 둡니다.
    ──────────────────────────────────────────────────────────── */
 
-export const GAS_URL = 'https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbzxy7GmMQSLAatWCKaxDMrwzFXSSOPxJFk4NKskGwgchR3Ma8mwS0fDYeYimOLdRSCBew/exec/exec';
-
+export const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxy7GmMQSLAatWCKaxDMrwzFXSSOPxJFk4NKskGwgchR3Ma8mwS0fDYeYimOLdRSCBew/exec';
 /* 학교 표기 — 다른 학교에서 쓸 때만 고치면 됩니다. */
 export const SCHOOL = {
   ko: '과천여자고등학교',
