@@ -15,7 +15,7 @@ export function csatStr(c) {
   const q = x => (x == null ? '·' : Math.round(x));
   /* 영어는 절대평가라 백분위가 없습니다. 자리를 비워 국·수·영·탐1·탐2 순서를 맞춥니다. */
   return `${등급} <span class="pct" title="백분위 국·수·영·탐1·탐2 — 영어는 절대평가라 백분위가 없습니다">`
-    + `(${q(c.pk)}·${q(c.pm)}·—·${q(c.ps1)}·${q(c.ps2)})</span>`;
+    + `(백분위 ${q(c.pk)} ${q(c.pm)} — ${q(c.ps1)} ${q(c.ps2)})</span>`;
 }
 
 const resTag = a => {

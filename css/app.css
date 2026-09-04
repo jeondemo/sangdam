@@ -251,7 +251,9 @@ button{font-family:inherit}
 .tab .c{font-weight:400;opacity:.75;margin-left:5px;font-size:11px}
 
 .stugrid{column-count:2;column-gap:12px}
-@media(max-width:1240px){.stugrid{column-count:1}}
+/* 백분위까지 들어가면 카드 한 장에 필요한 폭이 늘어납니다.
+   2단은 화면이 충분히 넓을 때만 씁니다. */
+@media(max-width:1560px){.stugrid{column-count:1}}
 .stu{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);overflow:hidden;
   break-inside:avoid;-webkit-column-break-inside:avoid;display:inline-block;width:100%;
   margin-bottom:12px;vertical-align:top}
@@ -265,8 +267,8 @@ button{font-family:inherit}
 .stu-h .yr{font-size:10.5px;font-weight:800;background:var(--accent-soft);color:var(--accent);
   padding:1px 7px;border-radius:5px}
 .stu-h .gpa{font-weight:800;font-size:13px;white-space:nowrap}
-.stu-h .csat{font-size:10.5px;color:var(--faint);font-variant-numeric:tabular-nums;white-space:nowrap}
-.stu-h .out{margin-left:auto;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:5px;
+.stu-h .csat{font-size:11px;color:#5b6b7c;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stu-h .out{margin-left:auto;flex:0 1 auto;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:5px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
 .app-row,.stu .app{display:flex;align-items:center;gap:9px;padding:7px 12px;
   border-top:1px solid #eff3f8;font-size:12.5px}
@@ -284,7 +286,7 @@ button{font-family:inherit}
 .t-min{background:var(--danger-soft);color:var(--danger)}
 .t-minok{background:var(--ok-soft);color:#12703a}
 .t-cut{background:#fffaf0;border:1px solid #ecd9b8;color:#9a6f28}
-.stu-h .pct{color:#a9b4c4;font-weight:500}
+.stu-h .pct{color:#3f5266;font-weight:600;margin-left:3px;word-spacing:.45em}
 .who-tag{background:var(--accent);color:#fff;font-size:11.5px;font-weight:700;
   padding:3px 10px;border-radius:6px;margin-right:8px}
 
