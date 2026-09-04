@@ -1,4 +1,4 @@
-/* IndexedDB 저장 — 불러온 데이터는 이 브라우저에만 남습니다. */
+/* IndexedDB 저장 — 이 브라우저에만 남습니다. 서버로 가지 않습니다. */
 
 const DB_NAME = 'gwacheon-counsel';
 const DB_VER = 1;
@@ -29,24 +29,18 @@ function tx(mode, fn) {
   }));
 }
 
-export const get = key => tx('readonly', s => s.get(key));
-export const set = (key, val) => tx('readwrite', s => s.put(val, key));
-export const del = key => tx('readwrite', s => s.delete(key));
+export const get = key => tx('readonly', s => s.get(key)).catch(() => null);
+export const set = (key, val) => tx('readwrite', s => s.put(val, key)).catch(() => null);
+export const del = key => tx('readwrite', s => s.delete(key)).catch(() => null);
 
-export const KEY_HISTORY = 'history';
-export const KEY_ROSTER = 'roster';
+export const KEY_DATA = 'history';     // 5개년 자료 캐시 (익명 — 이름 없음)
+export const KEY_ROSTER = 'roster';    // 학생 명단 (실명 — 교사가 저장을 선택했을 때만)
+export const KEY_LINK = 'linkkey';     // 접속 링크의 열쇠
 
-export async function loadAll() {
-  try {
-    const [history, roster] = await Promise.all([get(KEY_HISTORY), get(KEY_ROSTER)]);
-    return { history: history || null, roster: roster || null };
-  } catch (e) {
-    console.warn('저장된 데이터를 읽지 못했습니다.', e);
-    return { history: null, roster: null };
-  }
-}
+export async function clearRoster() { await del(KEY_ROSTER); }
 
 export async function clearAll() {
-  await del(KEY_HISTORY);
+  await del(KEY_DATA);
   await del(KEY_ROSTER);
+  await del(KEY_LINK);
 }
