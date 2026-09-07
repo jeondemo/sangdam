@@ -2,6 +2,9 @@
 
 import { isPass, JUDGE } from './match.js';
 
+/* 학급 코드는 306처럼 「학년+반」 세 자리입니다. 화면에는 「3학년 6반」으로 풉니다. */
+export const clsLabel = c => (c >= 100 ? `${Math.floor(c / 100)}학년 ${c % 100}반` : `${c}반`);
+
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const pct1 = (a, b) => (b ? ((a / b) * 100).toFixed(1) : '0.0');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -58,7 +61,7 @@ export function studentCard(st, total) {
     : d < -0.15 ? `<span class="up">1학년 대비 ${Math.abs(d).toFixed(2)} 상승</span>`
       : d > 0.15 ? `<span class="down">1학년 대비 ${d.toFixed(2)} 하락</span>`
         : '1학년 대비 큰 변화 없음';
-  return `<div class="who">${esc(st.nm)}<small>${st.c}학급 ${st.no}번</small></div>
+  return `<div class="who">${esc(st.nm)}<small>${esc(clsLabel(st.c))} ${st.no}번</small></div>
     <div class="rk">${st.r != null ? `전교 ${st.r}위 / ${total}명 · ` : ''}${trend}</div>
     <div class="trend">
       ${[0, 1, 2].map(i => `<div><span>${i + 1}학년</span><b>${g[i] != null ? g[i].toFixed(2) : '—'}</b></div>`).join('')}
@@ -231,7 +234,7 @@ export function mockCard(st, total) {
   const avg = [p.k, p.m, p.s1, p.s2].filter(x => x != null);
   const pa = avg.length ? (avg.reduce((a, b) => a + b, 0) / avg.length) : null;
   const ss = [s.k, s.m, s.s1, s.s2].every(x => x != null) ? s.k + s.m + s.s1 + s.s2 : null;
-  return `<div class="who">${esc(st.nm)}<small>${st.c}학급 ${st.no}번</small></div>
+  return `<div class="who">${esc(st.nm)}<small>${esc(clsLabel(st.c))} ${st.no}번</small></div>
     <div class="rk">${st.r != null ? `${st.r}위 / ${total}명 · ` : ''}백분위 평균 <b class="up">${pa != null ? pa.toFixed(1) : '—'}</b>${ss != null ? ` · 표점합 ${ss}` : ''}</div>
     <div class="mk">
       <div class="mk-h"><span></span><span>국</span><span>수</span><span>영</span><span>탐1</span><span>탐2</span></div>

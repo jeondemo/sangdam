@@ -250,15 +250,16 @@ const currentList = () => (S.mode === 'jg' ? S.mock?.students : S.roster?.studen
 
 function fillClasses() {
   const cs = [...new Set(currentList().map(s => s.c))].sort((a, b) => a - b);
-  $('cls').innerHTML = '<option value="">전체 학급</option>' + cs.map(c => `<option value="${c}">${c}반</option>`).join('');
+  $('cls').innerHTML = '<option value="">전체 학급</option>'
+    + cs.map(c => `<option value="${c}">${esc(R.clsLabel(c))}</option>`).join('');
 }
 
 function fillStudents() {
   const c = $('cls').value, q = ($('q').value || '').trim();
   const f = currentList().filter(s => (!c || String(s.c) === c) && (!q || s.nm.includes(q)));
-  const label = s => S.mode === 'jg'
-    ? `${s.c}-${String(s.no).padStart(2, '0')} ${s.nm} · 백 ${(pctAvg(s.pct) ?? 0).toFixed(0)}`
-    : `${s.c}-${String(s.no).padStart(2, '0')} ${s.nm} · ${s.g[3].toFixed(2)}`;
+  /* 목록에는 성적을 넣지 않습니다. 펼치면 반 전체의 점수가 한눈에 보이기 때문입니다.
+     선택한 학생의 성적은 아래 카드에서만 보여 줍니다. */
+  const label = s => `${s.no}번 ${s.nm}`;
   $('stu').innerHTML = '<option value="">직접 입력</option>' + f.map(s => `<option value="${s.c}-${s.no}">${esc(label(s))}</option>`).join('');
   if (S.cur && f.some(s => s.c === S.cur.c && s.no === S.cur.no)) $('stu').value = `${S.cur.c}-${S.cur.no}`;
 }
