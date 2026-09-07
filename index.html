@@ -42,13 +42,34 @@
       <div class="chips mode" id="modechips">
         <button class="chip" data-mode="susi" aria-pressed="true">수시·정시<small id="m-susi">명단 없음</small></button>
         <button class="chip" data-mode="jg" aria-pressed="false">정시만<small id="m-jg">명단 없음</small></button>
+        <button class="chip hidden" id="c-mode-sel" data-mode="sel" aria-pressed="false">과목 선택<small id="m-sel">1·2학년</small></button>
       </div>
 
+      <div id="sb-sel" class="hidden">
+        <div class="sbl">학년</div>
+        <div class="chips" id="selgrade">
+          <button class="chip" data-g="1" aria-pressed="true">1학년 <span class="wn">→ 2학년 선택</span></button>
+          <button class="chip" data-g="2">2학년 <span class="wn">→ 3학년 선택</span></button>
+        </div>
+        <div class="sbl">희망 분야 <span class="wn">최대 3개</span></div>
+        <input type="search" id="selq" placeholder="분야 이름으로 찾기">
+        <div class="fwrap" id="selfwrap"><div class="fbox darkscroll" id="selfbox"></div></div>
+        <div class="picked" id="selpicked"></div>
+        <div id="sb-selstu" class="hidden">
+          <div class="sbl">학생 선택</div>
+          <div class="row2"><select id="selcls"></select><select id="selstu"></select></div>
+        </div>
+      </div>
+
+      <div id="sb-stupick">
       <div class="sbl">학생 선택</div>
       <div class="row2"><select id="cls"></select><select id="stu"></select></div>
       <input type="search" id="q" placeholder="이름으로 찾기">
       <div id="stucard" class="sb-stu hidden"></div>
 
+      </div>
+
+      <div id="sb-cond">
       <div class="sbl">성적 조건</div>
       <div id="in-susi">
         <div class="gpa-in">
@@ -85,7 +106,9 @@
         <button class="chip" data-gy="3">예체능</button>
       </div>
 
-      <div class="row2 mt">
+      </div>
+
+      <div class="row2 mt" id="sb-nums">
         <div><label class="lbl">유사 학생 수</label>
           <select id="topn"><option>10</option><option>15</option><option selected>20</option><option>30</option><option>50</option></select></div>
         <div><label class="lbl">대상 연도</label>
@@ -116,6 +139,18 @@
       <div id="p-univ" class="hidden"></div>
       <div id="p-track" class="hidden"></div>
       <div id="p-jg" class="hidden"></div>
+    </div>
+    <div id="selview" class="hidden">
+      <div class="shead"><span class="tick"></span><h2 id="seltitle">선택과목 구성</h2>
+        <span class="snote" id="selnote"></span></div>
+      <div class="tabs" id="seltabs" role="tablist">
+        <button class="tab" role="tab" data-s="pick" aria-selected="true"><span>과목 고르기</span></button>
+        <button class="tab" role="tab" data-s="cond" aria-selected="false"><span>대학이 붙인 조건</span><span class="c" id="c-scond"></span></button>
+        <button class="tab" role="tab" data-s="miss" aria-selected="false"><span>우리 학교에 없는 과목</span><span class="c" id="c-smiss"></span></button>
+      </div>
+      <div id="s-pick"></div>
+      <div id="s-cond" class="hidden"></div>
+      <div id="s-miss" class="hidden"></div>
     </div>
     <div class="empty" id="placeholder">
       왼쪽에서 <b>학생을 선택</b>하면 성적이 비슷했던 졸업생들의 지원 결과가 여기에 표시됩니다.<br>
@@ -149,6 +184,8 @@
 <input type="file" id="f-history" accept=".xlsx,.xls" hidden>
 <input type="file" id="f-mock" accept=".xls,.xlsx,.html,.htm" multiple hidden>
 <input type="file" id="f-cut" accept=".xlsx,.xls,.csv" hidden>
+<input type="file" id="f-sel" accept=".xlsx,.xls" hidden>
+<input type="file" id="f-choice" accept=".xlsx,.xls" multiple hidden>
 
 <script src="./vendor/xlsx.full.min.js"></script>
 <script type="module" src="./js/main.js"></script>

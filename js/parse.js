@@ -437,3 +437,231 @@ export function parseCutTable(workbook, XLSX) {
   const years = [...new Set(rows.map(r => r.year).filter(Boolean))].sort();
   return { rows, meta: { n: rows.length, nUniv: univs.length, univs, years, loadedAt: Date.now() } };
 }
+
+/* ── 선택과목 자료 ─────────────────────────────────────
+   관리자가 올리는 「선택과목.xlsx」를 읽습니다. 시트 이름으로 찾고,
+   열은 머리글 문구로 찾아서 열 순서가 바뀌어도 견딥니다. */
+
+const SEL_SHEETS = {
+  field: ['학문분야', '학문 분야'],
+  rec: ['권장과목'],
+  cond: ['분야별조건', '분야별 조건'],
+  cur: ['우리학교과목', '우리 학교 과목'],
+  miss: ['미개설과목', '미개설 과목'],
+};
+
+function sheetRows(wb, XLSX, names) {
+  const nm = wb.SheetNames.find(s => names.some(n => s.replace(/\s+/g, '') === n.replace(/\s+/g, '')));
+  if (!nm) return null;
+  return XLSX.utils.sheet_to_json(wb.Sheets[nm], { header: 1, blankrows: false, defval: null });
+}
+
+/* 머리글 행을 찾아 {열이름:인덱스} 를 만듭니다. */
+function headMap(arr, need) {
+  for (let i = 0; i < Math.min(arr.length, 8); i++) {
+    const hdr = (arr[i] || []).map(v => (clean(v) || '').replace(/\s+/g, ''));
+    const col = {};
+    for (const [k, names] of Object.entries(need)) {
+      const j = hdr.findIndex(h => names.some(n => h === n.replace(/\s+/g, '') || h.startsWith(n.replace(/\s+/g, ''))));
+      if (j >= 0) col[k] = j;
+    }
+    if (Object.keys(col).length >= Math.ceil(Object.keys(need).length * 0.6)) return { hi: i, col };
+  }
+  return null;
+}
+
+export function parseSubjectTable(workbook, XLSX) {
+  const get = (arr, col, k) => (col[k] == null ? null : clean(arr[col[k]]));
+  const out = { fields: {}, order: [], school: { common: [], groups: [], extra: [] }, missing: [] };
+
+  /* 1) 학문분야 */
+  let a = sheetRows(workbook, XLSX, SEL_SHEETS.field);
+  if (!a) throw new Error('「학문분야」 시트를 찾지 못했습니다.');
+  let h = headMap(a, { gy: ['계열'], name: ['학문분야'], nOwn: ['근거대학수'], nGen: ['계열단위근거'], snu: ['서울대유형'], pref: ['서울대우선'], memo: ['학교메모'] });
+  if (!h) throw new Error('「학문분야」 시트의 머리글을 읽지 못했습니다.');
+  for (let i = h.hi + 1; i < a.length; i++) {
+    const name = get(a[i], h.col, 'name');
+    if (!name) continue;
+    out.fields[name] = {
+      name, gy: get(a[i], h.col, 'gy') || '', nOwn: num(a[i][h.col.nOwn]) || 0, nGen: num(a[i][h.col.nGen]) || 0,
+      snu: get(a[i], h.col, 'snu') === '해당 없음' ? '' : (get(a[i], h.col, 'snu') || ''),
+      pref: get(a[i], h.col, 'pref') || '', memo: get(a[i], h.col, 'memo') || '', subs: {},
+      notes: [],
+    };
+    out.order.push(name);
+  }
+
+  /* 2) 권장과목 */
+  a = sheetRows(workbook, XLSX, SEL_SHEETS.rec);
+  if (!a) throw new Error('「권장과목」 시트를 찾지 못했습니다.');
+  /* 대학 수는 등급 칸마다 따로 있습니다 — 그 과목이 받은 등급의 칸을 씁니다. */
+  h = headMap(a, { name: ['학문분야'], sub: ['과목'], tier: ['최종등급'], u: ['근거대학'], open: ['우리학교개설'],
+    core: ['핵심(학과)'], rec: ['권장(학과)'], gen: ['계열공통'], genrec: ['계열권장'] });
+  const TIER = { '핵심': 'core', '권장': 'rec', '계열 공통': 'gen', '계열공통': 'gen', '계열 권장': 'genrec', '계열권장': 'genrec' };
+  let nRec = 0;
+  for (let i = h.hi + 1; i < a.length; i++) {
+    const f = out.fields[get(a[i], h.col, 'name')], sub = get(a[i], h.col, 'sub');
+    if (!f || !sub) continue;
+    const t = TIER[(get(a[i], h.col, 'tier') || '').replace(/\s+/g, '')] || TIER[get(a[i], h.col, 'tier')];
+    if (!t) continue;
+    const nOf = k => (h.col[k] == null ? 0 : num(a[i][h.col[k]]) || 0);
+    f.subs[sub] = { t, n: nOf(t) || Math.max(nOf('core'), nOf('rec'), nOf('gen'), nOf('genrec')), u: (get(a[i], h.col, 'u') || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 5), area: get(a[i], h.col, 'open') === '교과군' };
+    nRec++;
+  }
+
+  /* 3) 분야별 조건 */
+  a = sheetRows(workbook, XLSX, SEL_SHEETS.cond);
+  if (a) {
+    h = headMap(a, { name: ['학문분야'], univ: ['대학'], txt: ['조건'] });
+    if (h) for (let i = h.hi + 1; i < a.length; i++) {
+      const f = out.fields[get(a[i], h.col, 'name')], txt = get(a[i], h.col, 'txt');
+      if (!f || !txt || txt.length < 8) continue;
+      if (f.notes.length < 8 && !f.notes.some(x => x.t === txt)) f.notes.push({ u: get(a[i], h.col, 'univ') || '', t: txt });
+    }
+  }
+
+  /* 4) 우리 학교 과목 */
+  a = sheetRows(workbook, XLSX, SEL_SHEETS.cur);
+  if (!a) throw new Error('「우리학교과목」 시트를 찾지 못했습니다.');
+  h = headMap(a, { sub: ['과목'], area: ['교과'], kind: ['과목구분'], sem: ['학기'], grp: ['묶음'], pick: ['택N', '택'], target: ['대상'], note: ['비고'] });
+  const gmap = new Map();
+  for (let i = h.hi + 1; i < a.length; i++) {
+    const sub = get(a[i], h.col, 'sub');
+    if (!sub) continue;
+    const sem = get(a[i], h.col, 'sem') || '', grp = get(a[i], h.col, 'grp') || '';
+    const rec = { s: sub, area: get(a[i], h.col, 'area') || '', kind: get(a[i], h.col, 'kind') || '', target: get(a[i], h.col, 'target') || '' };
+    if (grp === '공통') { out.school.common.push({ ...rec, sem }); continue; }
+    if (grp === '공동교육과정') { out.school.extra.push({ ...rec, sem, note: get(a[i], h.col, 'note') || '' }); continue; }
+    const key = sem + '|' + grp;
+    if (!gmap.has(key)) gmap.set(key, { sem, g: grp, pick: num(a[i][h.col.pick]) || 1, subs: [], only2: [] });
+    const G = gmap.get(key);
+    (rec.target === '현2학년만' ? G.only2 : G.subs).push(sub);
+  }
+  out.school.groups = [...gmap.values()];
+  out.school.kind = {}; out.school.area = {};
+  for (const r of [...out.school.common, ...out.school.extra]) { out.school.kind[r.s] = r.kind; out.school.area[r.s] = r.area; }
+  for (let i = h.hi + 1; i < a.length; i++) {
+    const sub = get(a[i], h.col, 'sub');
+    if (sub) { out.school.kind[sub] = get(a[i], h.col, 'kind') || ''; out.school.area[sub] = get(a[i], h.col, 'area') || ''; }
+  }
+
+  /* 5) 미개설 */
+  a = sheetRows(workbook, XLSX, SEL_SHEETS.miss);
+  if (a) {
+    h = headMap(a, { sub: ['과목'], f: ['이과목을권장한분야', '권장한분야'], tier: ['최고등급', '등급'], n: ['근거대학수'] });
+    if (h) for (let i = h.hi + 1; i < a.length; i++) {
+      const sub = get(a[i], h.col, 'sub');
+      if (!sub) continue;
+      out.missing.push({ s: sub, r: get(a[i], h.col, 'tier') || '', n: num(a[i][h.col.n]) || 0,
+        f: (get(a[i], h.col, 'f') || '').split(',').map(x => x.trim()).filter(Boolean) });
+    }
+  }
+
+  const nF = out.order.length;
+  if (!nF || !nRec) throw new Error('선택과목 자료를 읽지 못했습니다. 시트 이름과 머리글을 확인해 주세요.');
+  return { fields: out.fields, order: out.order, school: out.school, missing: out.missing,
+    meta: { nField: nF, nRec, nSub: Object.keys(out.school.kind).length, loadedAt: Date.now() } };
+}
+
+/* ── 학생 선택 결과 (학교 파일) ───────────────────────
+   이름이 들어 있는 파일입니다. 브라우저 안에서만 읽고 서버로 보내지 않습니다. */
+
+export function parseSubjectChoice(workbook, XLSX, filename) {
+  const out = [];
+  for (const nm of workbook.SheetNames) {
+    const arr = XLSX.utils.sheet_to_json(workbook.Sheets[nm], { header: 1, blankrows: false, defval: null });
+    if (!arr.length) continue;
+    const txt = nm + ' ' + (filename || '');
+    const mg = /([1-3])\s*학년/.exec(txt), ms = /([12])\s*학기/.exec(txt);
+    let hi = -1, col = {};
+    for (let i = 0; i < Math.min(arr.length, 8); i++) {
+      const hdr = (arr[i] || []).map(v => (clean(v) || '').replace(/\s+/g, ''));
+      const j = hdr.findIndex(h => h === '이름' || h === '성명');
+      if (j < 0) continue;
+      hi = i;
+      col = { nm: j, sid: hdr.findIndex(h => h === '학번'), cls: hdr.findIndex(h => h === '반'), no: hdr.findIndex(h => h === '번' || h === '번호') };
+      col.subs = [];
+      for (let k = j + 1; k < hdr.length; k++) if (hdr[k] && !/^(신학번|비고|합계|계)$/.test(hdr[k])) col.subs.push([k, (clean(arr[i][k]) || '').replace(/\s+/g, ' ').trim()]);
+      break;
+    }
+    if (hi < 0 || !col.subs.length) continue;
+    const students = [];
+    for (let i = hi + 1; i < arr.length; i++) {
+      const r = arr[i];
+      const name = clean(r[col.nm]);
+      if (!name || /합계|타임|과목$/.test(name)) continue;
+      const sid = col.sid >= 0 ? clean(r[col.sid]) : null;
+      const cls = col.cls >= 0 ? num(r[col.cls]) : (sid && sid.length >= 5 ? +sid.slice(1, 3) : null);
+      const no = col.no >= 0 ? num(r[col.no]) : (sid && sid.length >= 5 ? +sid.slice(3) : null);
+      if (cls == null || no == null) continue;
+      const picks = {};
+      for (const [k, s] of col.subs) {
+        const v = clean(r[k]);
+        if (v) picks[s] = String(v).trim();
+      }
+      if (Object.keys(picks).length) students.push({ cls, no, nm: name, picks });
+    }
+    if (students.length) out.push({
+      sem: `${mg ? mg[1] : '2'}-${ms ? ms[1] : '1'}`,
+      sheet: nm, n: students.length, students,
+    });
+  }
+  if (!out.length) throw new Error('선택 결과를 읽지 못했습니다. 「이름」 열이 있는 시트인지 확인해 주세요.');
+  return out;
+}
+
+/* 여러 학기 파일을 하나로 — 타임·인원 집계와 학생별 이수 목록.
+   과목명은 편제표 표기에 맞춰 고칩니다(띄어쓰기·로마숫자 차이 흡수). */
+const ROMAN = { '1': 'Ⅰ', '2': 'Ⅱ', 'I': 'Ⅰ', 'II': 'Ⅱ', 'i': 'Ⅰ', 'ii': 'Ⅱ' };
+const squash = s => String(s || '').replace(/\s+/g, '').replace(/[·・]/g, '')
+  .replace(/(Ⅰ|Ⅱ|I{1,2}|1|2)$/, m => ROMAN[m] || m);
+
+export function mergeChoice(list, sel) {
+  const index = {};
+  const groupOf = {};
+  if (sel) {
+    for (const g of sel.school.groups)
+      for (const s of g.subs.concat(g.only2 || [])) { index[squash(s)] = s; groupOf[g.sem + '|' + s] = g.g; }
+    for (const c of sel.school.common) { index[squash(c.s)] = c.s; groupOf[c.sem + '|' + c.s] = '공통'; }
+    for (const e of sel.school.extra) index[squash(e.s)] = e.s;
+  }
+  const fix = s => index[squash(s)] || String(s).replace(/\s+/g, ' ').trim();
+
+  const sem = {}, byStu = new Map();
+  for (const part of list) {
+    const S = sem[part.sem] = sem[part.sem] || { time: {}, count: {}, n: 0, _g: {} };
+    S.n = Math.max(S.n, part.n);
+    for (const st of part.students) {
+      const key = `${st.cls}-${st.no}`;
+      if (!byStu.has(key)) byStu.set(key, { cls: st.cls, no: st.no, nm: st.nm, by: {} });
+      const rec = byStu.get(key);
+      const names = [];
+      for (const [raw, v] of Object.entries(st.picks)) {
+        const s = fix(raw);
+        names.push(s);
+        S.count[s] = (S.count[s] || 0) + 1;
+        if (/^[A-E]$/.test(v)) {
+          const g = groupOf[part.sem + '|' + s] || '?';
+          const G = S._g[g] = S._g[g] || {};
+          (G[v] = G[v] || {})[s] = (G[v][s] || 0) + 1;
+        }
+      }
+      rec.by[part.sem] = names;
+    }
+  }
+  /* 교시는 묶음마다 따로입니다. 한 묶음 안에서 학생 수만큼 들어찬 표기만 진짜 교시로 봅니다. */
+  for (const S of Object.values(sem)) {
+    for (const [g, G] of Object.entries(S._g)) {
+      if (g === '?' || g === '공통') continue;
+      for (const [t, m] of Object.entries(G)) {
+        const tot = Object.values(m).reduce((a, b) => a + b, 0);
+        if (!S.n || tot !== S.n) continue;
+        (S.time[g] = S.time[g] || {})[t] = m;
+      }
+    }
+    delete S._g;
+  }
+  const students = [...byStu.values()].sort((a, b) => a.cls - b.cls || a.no - b.no);
+  for (const s of students) s.taken = [...new Set(Object.values(s.by).flat())];
+  return { sem, students, meta: { n: students.length, sems: Object.keys(sem).sort(), loadedAt: Date.now() } };
+}

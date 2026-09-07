@@ -66,6 +66,13 @@ export async function fetchCut(key) {
   return res.json();
 }
 
+/* 선택과목 자료 — 없어도 프로그램은 돌아갑니다. */
+export async function fetchSel(key) {
+  const res = await fetch(url({ k: key, mode: 'sel' }));
+  if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
+  return res.json();
+}
+
 /* 관리자 — 현재 상태 확인 */
 export async function adminStatus(adminKey) {
   return post({ action: 'status', admin: adminKey });

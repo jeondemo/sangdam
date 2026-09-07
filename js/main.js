@@ -2,7 +2,10 @@ import { GAS_URL, SCHOOL, ROSTER_STEPS } from '../config.js';
 import * as store from './store.js';
 import * as api from './api.js';
 import { encode, decode } from './codec.js';
-import { parseHistory, parseRoster, parseMockExam, mergeMockExam, pctAvg, examInfo, parseCutTable } from './parse.js';
+import {
+  parseHistory, parseRoster, parseMockExam, mergeMockExam, pctAvg, examInfo, parseCutTable,
+  parseSubjectTable, parseSubjectChoice, mergeChoice,
+} from './parse.js';
 import {
   buildIndex, findSimilar, summarize, aggregateUniv, aggregateTrack, aggregateJeongsi, csatAvg,
   findSimilarJeongsi, summarizeJeongsi, aggregateJeongsiUniv, aggregateGroup,
@@ -23,7 +26,13 @@ const S = {
   cutVersion: null,
   school: null,   // 우리 학교 5개년 정시 지원 집계
   cases: [],      // 현재 화면의 유사 학생 사례 — 목록과 「크게 보기」가 함께 씁니다
+  sel: null,      // 선택과목 자료 (대학 권장과목 + 우리 학교 편제) — 이름 없음
+  selVersion: null,
+  choice: null,   // 학생별 선택 결과 — 실명이 들어 있어 이 브라우저에만 둡니다
 };
+
+/* 과목 선택 화면의 상태 */
+const SEL = { picked: [], grade: 1, chosen: new Set(), openG: new Set(), sumOpen: false, stu: null };
 
 /* ── 표지 조각 ─────────────────────────────────────── */
 
@@ -217,6 +226,8 @@ function showApp(mode) {
     (S.mock ? `<div class="row"><span>${esc(S.mock.meta.label || '모의고사')}</span><b class="off">${S.mock.meta.n}명</b></div>` : '');
   $('m-susi').textContent = S.roster ? `${gl(S.roster)} ${S.roster.meta.n}명`.trim() : '명단 없음';
   $('m-jg').textContent = S.mock ? (S.mock.meta.label || `${S.mock.meta.n}명`) : '명단 없음';
+  $('c-mode-sel').classList.toggle('hidden', !S.sel);
+  if (S.sel) $('m-sel').textContent = S.choice ? `${S.choice.meta.n}명 반영` : '1·2학년';
   setMode(mode || S.mode);
 }
 
@@ -224,6 +235,25 @@ function setMode(mode) {
   S.mode = mode;
   S.cur = null;
   document.querySelectorAll('#modechips .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.mode === mode)));
+
+  /* 과목 선택은 성적이 아니라 편제를 다루므로 사이드바 구성이 다릅니다. */
+  const isSel = mode === 'sel';
+  $('sb-sel').classList.toggle('hidden', !isSel);
+  $('sb-stupick').classList.toggle('hidden', isSel);
+  $('sb-cond').classList.toggle('hidden', isSel);
+  $('sb-nums').classList.toggle('hidden', isSel);
+  $('selview').classList.add('hidden');
+  $('results').classList.toggle('hidden', true);
+  $('btn-roster').textContent = isSel ? '학년별 선택 결과 올리기'
+    : (mode === 'jg' ? '모의고사 성적표 올리기' : '학생부성적표 다시 올리기');
+  if (isSel) {
+    $('placeholder').classList.remove('hidden');
+    fillSelStudents();
+    selTab('pick');
+    selPaint();
+    return;
+  }
+
   $('in-susi').classList.toggle('hidden', mode !== 'susi');
   $('in-jg').classList.toggle('hidden', mode !== 'jg');
   $('stucard').classList.add('hidden');
@@ -232,7 +262,6 @@ function setMode(mode) {
   $('t-jg').textContent = mode === 'jg' ? '배치' : '정시';
   document.querySelector('.tab[data-t="jg"]')?.classList.remove('hidden');
   $('c-jg').textContent = '';
-  $('btn-roster').textContent = mode === 'jg' ? '모의고사 성적표 올리기' : '학생부성적표 다시 올리기';
   selectTab('stu');
   fillClasses();
   fillStudents();
@@ -299,6 +328,7 @@ function showEmpty(msg) {
 }
 
 function run() {
+  if (S.mode === 'sel') return runSel();
   if (!S.index) return;
   caseClose();  /* 목록이 다시 그려지면 번호가 바뀌므로 열려 있던 창은 닫습니다. */
   return S.mode === 'jg' ? runJeongsi() : runSusi();
@@ -376,6 +406,96 @@ function runJeongsi() {
   finish(sel, { univ: uni.length, jg: pl ? pl.list.length : '' });
 }
 
+/* ── 선택과목 구성 ─────────────────────────────────── */
+
+function fillSelStudents() {
+  const list = S.choice?.students || [];
+  const cs = [...new Set(list.map(s => s.cls))].sort((a, b) => a - b);
+  const keepC = $('selcls').value;
+  $('selcls').innerHTML = '<option value="">전체 학급</option>'
+    + cs.map(c => `<option value="${c}">${esc(R.clsLabel(c))}</option>`).join('');
+  if (keepC) $('selcls').value = keepC;
+  const c = $('selcls').value;
+  const f = list.filter(s => !c || String(s.cls) === c);
+  $('selstu').innerHTML = '<option value="">선택 안 함</option>'
+    + f.map(s => `<option value="${s.cls}-${s.no}">${esc(`${s.no}번 ${s.nm}`)}</option>`).join('');
+  if (SEL.stu && f.some(s => s.cls === SEL.stu.cls && s.no === SEL.stu.no)) $('selstu').value = `${SEL.stu.cls}-${SEL.stu.no}`;
+  else SEL.stu = null;
+}
+
+function selPaint() {
+  if (!S.sel) return;
+  $('selfbox').innerHTML = R.fieldList(S.sel, SEL.picked, ($('selq').value || '').trim());
+  $('selpicked').innerHTML = R.pickedChips(SEL.picked);
+  $('sb-selstu').classList.toggle('hidden', !(S.choice && SEL.grade === 2));
+  runSel();
+}
+
+function runSel() {
+  if (!S.sel) return;
+  const m = S.sel.meta || {};
+  $('selnote').textContent = `대학 ${m.nRec ? `권장과목 ${m.nRec.toLocaleString()}건` : ''}`
+    + ` · 우리 학교 개설 ${m.nSub || 0}과목`;
+  $('seltitle').textContent = SEL.grade === 1 ? '2학년 과목 고르기' : '3학년 과목 고르기';
+  if (!SEL.picked.length) {
+    $('selview').classList.add('hidden');
+    $('placeholder').classList.remove('hidden');
+    $('placeholder').innerHTML = '왼쪽에서 <b>희망 분야</b>를 고르면 그 분야가 요구하는 과목이 우리 학교 편제 위에 표시됩니다.'
+      + '<br><span class="fine">분야는 최대 3개까지 함께 볼 수 있습니다.</span>';
+    return;
+  }
+  $('placeholder').classList.add('hidden');
+  $('selview').classList.remove('hidden');
+  const taken = (SEL.grade === 2 && SEL.stu) ? SEL.stu.taken : null;
+  $('s-pick').innerHTML = R.selPanel(S.sel, {
+    picked: SEL.picked, grade: SEL.grade, chosen: SEL.chosen, taken,
+    choice: S.choice, sumOpen: SEL.sumOpen, openG: SEL.openG, stu: SEL.stu,
+  });
+  $('s-cond').innerHTML = R.selCond(S.sel, SEL.picked);
+  $('s-miss').innerHTML = R.selMiss(S.sel, SEL.picked);
+  $('c-scond').textContent = SEL.picked.reduce((a, f) => a + f.notes.length, 0) || '';
+  const names = new Set(SEL.picked.map(f => f.name));
+  $('c-smiss').textContent = S.sel.missing.filter(x => x.f.some(y => names.has(y))).length || '';
+}
+
+function selTab(t) {
+  document.querySelectorAll('#seltabs .tab').forEach(x => x.setAttribute('aria-selected', String(x.dataset.s === t)));
+  ['pick', 'cond', 'miss'].forEach(k => $('s-' + k).classList.toggle('hidden', k !== t));
+}
+
+function selPick(name) {
+  const f = S.sel.fields[name];
+  if (!f) return;
+  const i = SEL.picked.findIndex(p => p.name === name);
+  if (i >= 0) SEL.picked.splice(i, 1);
+  else if (SEL.picked.length >= 3) return;
+  else SEL.picked.push(f);
+  selPaint();
+}
+
+/* 학생별 선택 결과 — 실명이 들어 있어 서버로 보내지 않습니다. */
+async function loadChoice(files) {
+  try {
+    const parts = [];
+    for (const f of files) {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      parts.push(...parseSubjectChoice(wb, XLSX, f.name));
+    }
+    if (!parts.length) throw new Error('「이름」 열이 있는 시트를 찾지 못했습니다.');
+    S.choice = mergeChoice(parts, S.sel);
+    await store.set(store.KEY_CHOICE, S.choice);
+    $('m-sel').textContent = `${S.choice.meta.n}명 반영`;
+    fillSelStudents();
+    selPaint();
+    /* 학기는 시트 이름과 파일 이름에서 읽습니다. 잘못 읽히면 집계가 섞이므로 그대로 보여 드립니다. */
+    alert(`선택 결과를 읽었습니다 — 학생 ${S.choice.meta.n}명\n\n`
+      + parts.map(x => `${x.sem}  ${x.sheet} (${x.n}명)`).join('\n')
+      + '\n\n학기가 잘못 읽혔으면 파일 이름에 「2학년 2학기」처럼 넣어 다시 올려 주세요.');
+  } catch (e) {
+    alert('선택 결과를 읽지 못했습니다 — ' + e.message);
+  }
+}
+
 /* ── 관리자 ────────────────────────────────────────── */
 
 function screenAdmin(status, msg) {
@@ -408,6 +528,18 @@ function screenAdmin(status, msg) {
           <span id="c-parsed">파일을 올리면 대학 수를 확인합니다</span></span>
           <button class="mini" id="c-send" disabled>시트에 반영</button></div>
       </div>
+      <div class="cv-panel">
+        <div class="p-head"><span class="p-num">선</span><h2>선택과목 자료</h2>
+          <span class="p-tag">${esc(status?.선택요약 || '아직 없음')}</span></div>
+        <div class="p-hint">대학이 공개한 <b>전공별 권장과목</b>과 우리 학교 편제를 담은 엑셀입니다.
+          「학교 메모」 칸에 선생님 안내를 적어 다시 올리면 그대로 화면에 나옵니다.${status?.선택갱신 ? ` 최종 갱신 ${esc(status.선택갱신)}` : ''}</div>
+        <div class="adm-row"><span class="n">1</span><span class="t"><b>선택과목 엑셀 올리기</b>
+          <span>학문분야 · 권장과목 · 우리학교과목 시트가 있는 파일</span></span>
+          <button class="mini" id="s-pick2">파일 선택</button></div>
+        <div class="adm-row"><span class="n">2</span><span class="t"><b>변환 확인</b>
+          <span id="s-parsed">파일을 올리면 분야 수를 확인합니다</span></span>
+          <button class="mini" id="s-send" disabled>시트에 반영</button></div>
+      </div>
       ${msg ? `<div class="cv-panel"><div class="p-hint" style="color:#e5ebfa">${msg}</div></div>` : ''}
     </div>
   </div>`, [['d-gold', '관리자']]);
@@ -415,6 +547,8 @@ function screenAdmin(status, msg) {
   $('a-send').addEventListener('click', sendHistory);
   $('c-pick').addEventListener('click', () => $('f-cut').click());
   $('c-send').addEventListener('click', sendCut);
+  $('s-pick2').addEventListener('click', () => $('f-sel').click());
+  $('s-send').addEventListener('click', sendSel);
 }
 
 let pendingCut = null;
@@ -446,6 +580,37 @@ async function sendCut() {
   } catch (e) {
     $('c-parsed').innerHTML = `<span style="color:#ff9c9c">${esc(e.message)}</span>`;
     $('c-send').disabled = false;
+  }
+}
+
+let pendingSel = null;
+
+async function pickSel(file) {
+  $('s-parsed').textContent = `${file.name} 읽는 중…`;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const data = parseSubjectTable(wb, XLSX);
+    if (!data.order.length) throw new Error('「학문분야」 시트에서 분야를 찾지 못했습니다.');
+    pendingSel = data;
+    const m = data.meta;
+    $('s-parsed').innerHTML = `<b style="color:#e5ebfa">${m.nField}개 학문분야</b> · 권장과목 ${m.nRec.toLocaleString()}건 · 우리 학교 ${m.nSub}과목`;
+    $('s-send').disabled = false;
+  } catch (e) {
+    $('s-parsed').innerHTML = `<span style="color:#ff9c9c">읽지 못했습니다 — ${esc(e.message)}</span>`;
+    $('s-send').disabled = true;
+  }
+}
+
+async function sendSel() {
+  if (!pendingSel) return;
+  $('s-send').disabled = true;
+  try {
+    const res = await api.uploadData(S.admin, pendingSel, (i, n) => { $('s-parsed').textContent = `보내는 중 ${i}/${n}`; }, 'sel');
+    await store.del(store.KEY_SEL);
+    screenAdmin(await api.adminStatus(S.admin).catch(() => null), `선택과목 자료 반영이 끝났습니다. ${esc(res.요약 || '')}`);
+  } catch (e) {
+    $('s-parsed').innerHTML = `<span style="color:#ff9c9c">${esc(e.message)}</span>`;
+    $('s-send').disabled = false;
   }
 }
 
@@ -491,7 +656,8 @@ async function loadHistory() {
     api.fetchVersion(S.key).then(v => {
       if (v.version && v.version !== S.version) refresh();
       loadCut(v.cutVersion);
-    }).catch(() => loadCut(null));
+      loadSel(v.selVersion);
+    }).catch(() => { loadCut(null); loadSel(null); });
     return;
   }
   screenLoading('5개년 지원결과를 불러오는 중', 55);
@@ -500,6 +666,7 @@ async function loadHistory() {
   S.version = res.version;
   await store.set(store.KEY_DATA, { enc: res.data, version: res.version });
   await loadCut(null);
+  await loadSel(null);
 }
 
 /* 배치기준표 — 없어도 프로그램은 돌아갑니다. 조용히 시도합니다. */
@@ -513,6 +680,31 @@ async function loadCut(serverVersion) {
     await store.set(store.KEY_CUT, { data: res.data, version: res.version });
     if (S.mode === 'jg' && S.index && !$('app').classList.contains('hidden')) run();
   } catch { if (cached?.data) S.cut = cached.data; }
+}
+
+/* 선택과목 자료 — 없어도 프로그램은 돌아갑니다. 조용히 시도합니다. */
+async function loadSel(serverVersion) {
+  const cached = await store.get(store.KEY_SEL);
+  const use = async d => {
+    S.sel = d;
+    S.choice = await store.get(store.KEY_CHOICE).catch(() => null);
+    if (!S.choice?.students?.length) S.choice = null;
+    if (!$('app').classList.contains('hidden')) {
+      $('c-mode-sel').classList.remove('hidden');
+      $('m-sel').textContent = S.choice ? `${S.choice.meta.n}명 반영` : '1·2학년';
+      if (S.mode === 'sel') { fillSelStudents(); selPaint(); }
+    }
+  };
+  if (cached?.data && (!serverVersion || cached.version === serverVersion)) {
+    S.selVersion = cached.version; await use(cached.data); return;
+  }
+  try {
+    const res = await api.fetchSel(S.key);
+    if (!res.ok || !res.data?.fields) { if (cached?.data) await use(cached.data); return; }
+    S.selVersion = res.version;
+    await store.set(store.KEY_SEL, { data: res.data, version: res.version });
+    await use(res.data);
+  } catch { if (cached?.data) await use(cached.data); }
 }
 
 async function refresh() {
@@ -558,7 +750,7 @@ function bindChips(id, cb) {
 }
 
 function selectTab(t) {
-  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', String(x.dataset.t === t)));
+  document.querySelectorAll('#results .tab').forEach(x => x.setAttribute('aria-selected', String(x.dataset.t === t)));
   ['stu', 'univ', 'track', 'jg'].forEach(k => $('p-' + k).classList.toggle('hidden', k !== t));
 }
 
@@ -622,6 +814,40 @@ $('f-roster').addEventListener('change', e => { if (e.target.files[0]) loadRoste
 $('f-mock').addEventListener('change', e => { if (e.target.files.length) loadMock([...e.target.files]); e.target.value = ''; });
 $('f-history').addEventListener('change', e => { if (e.target.files[0]) pickHistory(e.target.files[0]); e.target.value = ''; });
 $('f-cut').addEventListener('change', e => { if (e.target.files[0]) pickCut(e.target.files[0]); e.target.value = ''; });
+$('f-sel').addEventListener('change', e => { if (e.target.files[0]) pickSel(e.target.files[0]); e.target.value = ''; });
+$('f-choice').addEventListener('change', e => { if (e.target.files.length) loadChoice([...e.target.files]); e.target.value = ''; });
+
+/* 과목 선택 화면의 조작 */
+$('selfbox').addEventListener('click', e => {
+  const b = e.target.closest('button[data-f]'); if (b) selPick(b.dataset.f);
+});
+$('selpicked').addEventListener('click', e => {
+  const b = e.target.closest('button[data-x]'); if (b) selPick(b.dataset.x);
+});
+$('selq').addEventListener('input', () => {
+  if (S.sel) $('selfbox').innerHTML = R.fieldList(S.sel, SEL.picked, ($('selq').value || '').trim());
+});
+bindChips('selgrade', b => {
+  SEL.grade = +b.dataset.g; SEL.chosen.clear(); SEL.openG.clear();
+  if (SEL.grade !== 2) SEL.stu = null;
+  selPaint();
+});
+$('selcls').addEventListener('change', () => { SEL.stu = null; fillSelStudents(); runSel(); });
+$('selstu').addEventListener('change', () => {
+  const v = $('selstu').value;
+  const [c, no] = v ? v.split('-').map(Number) : [];
+  SEL.stu = v ? (S.choice?.students || []).find(x => x.cls === c && x.no === no) || null : null;
+  runSel();
+});
+document.querySelectorAll('#seltabs .tab').forEach(t => t.addEventListener('click', () => selTab(t.dataset.s)));
+$('s-pick').addEventListener('click', e => {
+  const sub = e.target.closest('.sub[data-s]');
+  if (sub) { const k = sub.dataset.s; SEL.chosen.has(k) ? SEL.chosen.delete(k) : SEL.chosen.add(k); return runSel(); }
+  const more = e.target.closest('.more[data-m]');
+  if (more) { const k = more.dataset.m; SEL.openG.has(k) ? SEL.openG.delete(k) : SEL.openG.add(k); return runSel(); }
+  const tog = e.target.closest('.moretog[data-sum]');
+  if (tog) { SEL.sumOpen = !SEL.sumOpen; return runSel(); }
+});
 
 /* 배치 탭 안의 판정 칩·검색 */
 function filterPlacement() {
@@ -653,10 +879,12 @@ let timer = null;
 bindChips('gychips', b => { selGy = +b.dataset.gy; run(); });
 bindChips('modechips', b => setMode(b.dataset.mode));
 
-document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => selectTab(t.dataset.t)));
+document.querySelectorAll('#results .tab').forEach(t => t.addEventListener('click', () => selectTab(t.dataset.t)));
 
 $('btn-roster').addEventListener('click', () => {
-  if (S.mode === 'jg') $('f-mock').click(); else screenUpload();
+  if (S.mode === 'sel') $('f-choice').click();
+  else if (S.mode === 'jg') $('f-mock').click();
+  else screenUpload();
 });
 $('btn-wipe').addEventListener('click', async () => {
   if (!confirm('이 컴퓨터에 저장된 명단과 자료를 지웁니다.\n다음 접속 때 링크로 다시 받아옵니다.\n계속할까요?')) return;

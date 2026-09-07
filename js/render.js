@@ -1,6 +1,8 @@
 /* 화면 렌더링 — HTML 문자열을 만들어 돌려줍니다. */
 
 import { isPass, JUDGE } from './match.js';
+import { TIER_NAME, TIER_RANK, mergeSub, feasible, summaryOf, whereOf,
+  sciProgress, isSci, overCore, groupsFor } from './subject.js';
 
 /* 학급 코드는 306처럼 「학년+반」 세 자리입니다. 화면에는 「3학년 6반」으로 풉니다. */
 export const clsLabel = c => (c >= 100 ? `${Math.floor(c / 100)}학년 ${c % 100}반` : `${c}반`);
@@ -400,4 +402,166 @@ export function placementTable(res, opts) {
   <div class="note fine">처음에는 <b>적정</b>만 보여 드립니다. 위 칩으로 안정·소신·상향도 볼 수 있습니다.
     판정 기준: 안정 +2 이상 · 적정 0 이상 · 소신 −1.5 이상 · 상향 −3 이상 · 도전 그 아래. 「평균」으로만 공개한 대학은 70%컷보다 0.7 높다고 보고 보정했습니다.
     「유사」는 이 화면의 유사 졸업생, 「학과」·「대학」은 우리 학교 5개년 정시 지원 전체입니다.</div>`;
+}
+
+/* ── 선택과목 구성 ─────────────────────────────────── */
+
+
+const TCLS = { core: 't-core', rec: 't-rec', gen: 't-gen', genrec: 't-gen' };
+
+/* 받침이 있으면 「이」, 없으면 「가」 */
+function josa(name, a, b) {
+  const c = String(name || '').trim().slice(-1).charCodeAt(0);
+  const has = c >= 0xac00 && c <= 0xd7a3 ? (c - 0xac00) % 28 !== 0 : true;
+  return has ? a : b;
+}
+
+function pane(cls, title, body, src, memo) {
+  return `<div class="pane ${cls || ''}"><div class="ph"><span class="bar"></span>
+    <span class="tt">${esc(title)}</span>${src ? `<span class="src">${esc(src)}</span>` : ''}</div>
+    <div class="pb">${body}</div>
+    ${memo ? `<div class="memo"><span class="lb">학교 메모</span>${esc(memo)}</div>` : ''}</div>`;
+}
+
+export function fieldList(sel, picked, q) {
+  const by = {};
+  for (const n of sel.order) { const f = sel.fields[n]; (by[f.gy] = by[f.gy] || []).push(f); }
+  let h = '';
+  for (const gy of ['인문', '사회', '교육', '자연', '공학', '의약', '예체능']) {
+    const list = (by[gy] || []).filter(f => !q || f.name.includes(q));
+    if (!list.length) continue;
+    h += `<div class="gy">${esc(gy)}</div>`;
+    for (const f of list)
+      h += `<button data-f="${esc(f.name)}" aria-pressed="${picked.some(p => p.name === f.name)}">`
+        + `${esc(f.name)}<span class="n">${f.nOwn + f.nGen}곳</span></button>`;
+  }
+  return h || '<div class="gy">찾는 분야가 없습니다</div>';
+}
+
+export function pickedChips(picked) {
+  return picked.map(f => `<span class="pk"><b>${esc(f.name)}</b><button data-x="${esc(f.name)}">×</button></span>`).join('');
+}
+
+/* 분야 설명 — 표에 있는 값만 조합합니다. */
+function fieldPane(f, sel, WHERE) {
+  const s = summaryOf(f, sel), p = [];
+  if (s.areas.length) p.push(`교과로는 ${s.areas.map(([k, v]) => `<b>${esc(k)}</b>(${v.n}곳)`).join(', ')}을 봅니다.`);
+  if (s.already.length) p.push(`이 중 ${s.already.map(([k]) => esc(k)).join('·')}은 우리 학교에서 전원이 이미 듣습니다.`);
+  if (s.topick.length) p.push(`직접 골라야 하는 것은 ${s.topick.map(([k, v]) =>
+    `<b>${esc(k)}</b> <span class="fine">(${v.n}곳 · ${esc(WHERE[k] || '')})</span>`).join(', ')}입니다.`);
+  if (!p.length) p.push('대학이 따로 지정한 과목이 없습니다. 진로와 적성에 맞게 고르면 됩니다.');
+  const src = `대교협 ${f.nOwn + f.nGen}곳` + (f.snu ? ` · 서울대 ${f.snu}` : '');
+  const pref = f.pref ? `<br><span class="fine">서울대 우선 이수 권장 — ${esc(f.pref)}</span>` : '';
+  return pane('', f.name, p.join(' ') + pref, src, f.memo);
+}
+
+export function selPanel(sel, st) {
+  const { picked, grade, chosen, taken, choice, sumOpen, openG } = st;
+  const WHERE = whereOf(sel);
+  const G = groupsFor(sel, grade);
+  const TK = new Set(taken || []);
+  const timeOf = (sem, g) => sub => {
+    const T = choice?.sem?.[sem]?.time?.[g];
+    return T ? Object.keys(T).filter(k => T[k][sub] != null).sort() : [];
+  };
+  const cntOf = (sem, sub) => choice?.sem?.[sem]?.count?.[sub];
+
+  /* 카드 위 안내 */
+  const good = [], warn = [];
+  const commonCore = sel.school.common.filter(c => {
+    const m = mergeSub(picked, c.s); return m && (m.t === 'core' || m.t === 'rec');
+  }).map(c => `${esc(c.s)} <span class="fine">(${esc(c.sem)})</span>`);
+  if (commonCore.length)
+    good.push(`이 분야가 핵심·권장으로 꼽은 과목 중 <b>우리 학교에서 전원이 이미 듣는 것</b> — ${commonCore.join(', ')}`);
+
+  if (grade === 2 && st.stu) {
+    const pr = sciProgress(TK);
+    const nm = `<b>${esc(st.stu.nm)}</b>${josa(st.stu.nm, '이', '가')}`;
+    const line = `${nm} 2학년에 이수한 과학 — 일반선택 ${pr.gen.length ? esc(pr.gen.join(', ')) : '없음'}`
+      + ` / 진로선택 ${pr.car.length ? esc(pr.car.join(', ')) : '<b>없음</b>'}`;
+    if (isSci(picked)) {
+      if (!pr.need) good.push(line + '<br>과학 진로선택 <b>3과목을 이미 채웠습니다.</b> 3학년은 위계를 이어 가면 됩니다.');
+      else warn.push(line + `<br>대학이 권장하는 <b>과학 진로선택 3과목</b>까지 <b>${pr.need}과목</b>이 남았습니다.`
+        + (pr.gen.length ? '' : '<br>2학년에 과학 일반선택도 없어서, 3학년에 진로선택만 듣는 것은 <b>위계가 끊긴 이수</b>로 보일 수 있습니다.'));
+    } else if (pr.gen.length || pr.car.length) good.push(line);
+    /* 자연계가 아닌 분야에서 「과학 없음」은 알릴 일이 아니라 그냥 넘어갑니다. */
+    const mine = (st.stu.taken || []).filter(x => mergeSub(picked, x));
+    if (mine.length) good.push(`${nm} 2학년에 들은 과목 중 이 분야가 꼽은 것 — ${mine.map(esc).join(', ')}`);
+  }
+
+  /* 묶음 카드 */
+  let cards = '';
+  for (const g of G) {
+    const tOf = timeOf(g.sem, g.g);
+    /* 같은 과목이 학기마다 따로 있으므로 「학기|묶음|과목」으로 구분합니다. */
+    const K = s => `${g.sem}|${g.g}|${s}`;
+    const rows = g.subs.map(s => {
+      const m = mergeSub(picked, s);
+      const tms = tOf(s), n = cntOf(g.sem, s), isT = TK.has(s), on = chosen.has(K(s));
+      const tag = m ? `<span class="tag ${TCLS[m.t]}">${TIER_NAME[m.t]}</span>`
+        : '<span class="tag t-non">관계없음</span>';
+      const cnt = n != null ? (n < 15 ? `<span class="few">2학년 ${n}명</span>` : `<span class="why">2학년 ${n}명</span>`) : '';
+      return { s, m, html: `<div class="sub${on ? ' on' : ''}${isT ? ' done' : ''}" data-s="${esc(K(s))}">
+        <span class="bx">${(on || isT) ? '✓' : ''}</span>
+        <span class="nm"><b>${esc(s)}</b><i>${esc(sel.school.kind[s] || '')}${sel.school.area[s] ? ' · ' + esc(sel.school.area[s]) : ''}${isT ? ' · 이수함' : ''}</i></span>
+        <span class="rt">${tms.map(t => `<span class="tm">${t}</span>`).join('')}${cnt}${m ? `<span class="why">${m.n}곳</span>` : ''}${tag}</span></div>` };
+    });
+    rows.sort((a, b) => (a.m ? TIER_RANK[a.m.t] : 9) - (b.m ? TIER_RANK[b.m.t] : 9) || (b.m?.n || 0) - (a.m?.n || 0));
+    const rel = rows.filter(r => r.m || chosen.has(K(r.s)) || TK.has(r.s));
+    const irr = rows.filter(r => !(r.m || chosen.has(K(r.s)) || TK.has(r.s)));
+    const key = g.sem + g.g, open = openG.has(key);
+    const got = g.subs.filter(s => chosen.has(K(s)));
+    const T = choice?.sem?.[g.sem]?.time?.[g.g];
+    const slots = T ? `<div class="slots">${Object.keys(T).sort().map(t => {
+      const hit = g.subs.find(s => (chosen.has(K(s)) || TK.has(s)) && tOf(s).includes(t));
+      return `<div class="slot${hit ? ' f' : ''}">${t}타임<b>${hit ? esc(hit) : '—'}</b></div>`;
+    }).join('')}<div class="fine" style="flex:1 1 100%;margin-top:2px">↑ 올해 2학년 기준입니다. 내년 시간표는 아직 정해지지 않았습니다.</div></div>` : '';
+    const cls = got.length === g.pick ? 'full' : (got.length > g.pick ? 'over' : '');
+    cards += `<div class="sem"><div class="sem-h"><span class="t">${esc(g.sem)}</span>
+      <span class="g">${esc(g.g)}그룹 [택${g.pick}]</span><span class="cnt ${cls}">${got.length} / ${g.pick}</span></div>
+      ${slots}${rel.map(r => r.html).join('')}
+      ${irr.length ? `<div class="more" data-m="${key}">${open ? '▲ 관계없는 과목 접기' : `▼ 이 분야와 관계없는 과목 ${irr.length}개`}</div>
+        <div class="${open ? '' : 'hidden'}">${irr.map(r => r.html).join('')}</div>` : ''}</div>`;
+
+    if (got.length > g.pick) warn.push(`<b>${esc(g.sem)} ${esc(g.g)}그룹</b>은 ${g.pick}개까지인데 ${got.length}개를 골랐습니다.`);
+    if (got.length > 1 && !feasible(tOf, got))
+      warn.push(`<b>${esc(g.sem)} ${esc(g.g)}그룹</b> — 지금 고른 ${got.map(esc).join(', ')}는 <b>올해 시간표 기준으로는 함께 들을 수 없습니다.</b>`
+        + ' <span class="fine">(내년 시간표는 아직 정해지지 않았습니다)</span>');
+    const oc = overCore(g, picked);
+    if (oc) warn.push(`<b>${esc(g.sem)} ${esc(g.g)}그룹</b>에 핵심 과목이 ${oc.length}개인데 자리는 ${g.pick}개입니다 — ${oc.map(esc).join(', ')} 중에서 골라야 합니다.`);
+  }
+
+  const sum = picked.map(f => fieldPane(f, sel, WHERE)).join('');
+  const head = (picked.length > 1 && !sumOpen)
+    ? `<div class="moretog" data-sum="1">▼ 분야별 설명 ${picked.length}개 보기</div>`
+    : sum + (picked.length > 1 ? '<div class="moretog" data-sum="1">▲ 분야별 설명 접기</div>' : '');
+
+  return head
+    + (good.length ? pane('ok', '확인된 것', good.join('<br>')) : '')
+    + (warn.length ? pane('warn', '짚어야 할 것', warn.join('<br>')) : '')
+    + `<div class="sems">${cards}</div>`;
+}
+
+export function selCond(sel, picked) {
+  const rows = [];
+  for (const f of picked) for (const n of f.notes) rows.push([f.name, n.u, n.t]);
+  if (!rows.length) return '<div class="empty">이 분야에는 대학이 따로 붙인 조건이 없습니다.</div>';
+  return `<div class="note">대학이 권장과목 옆에 <b>따로 적어 둔 조건</b>입니다. "3과목 이상", "위계에 맞게", "일반선택 먼저" 같은 말이 실제 판단 기준이 됩니다.</div>
+  <div class="tbl-wrap"><table><thead><tr><th>분야</th><th>대학</th><th>조건 (원문)</th></tr></thead><tbody>
+  ${rows.map(([a, b, c]) => `<tr><td class="nw">${esc(a)}</td><td class="nw mut">${esc(b)}</td><td>${esc(c)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+export function selMiss(sel, picked) {
+  const names = new Set(picked.map(f => f.name));
+  const ms = sel.missing.filter(m => m.f.some(x => names.has(x)));
+  const extra = sel.school.extra.map(e => `${esc(e.s)} <span class="fine">(${esc(e.note || e.sem)})</span>`).join(' · ');
+  if (!ms.length) return `<div class="note">이 분야가 권장하는 과목은 <b>우리 학교에서 모두 들을 수 있습니다.</b></div>`
+    + (extra ? `<div class="note fine">공동교육과정·주문형 강좌: ${extra}</div>` : '');
+  return `<div class="note warn">대학이 권장하지만 <b>우리 학교에 개설되지 않은</b> 과목입니다. 공동교육과정으로 메울 수 있는지 확인해 보세요.</div>
+  <div class="tbl-wrap"><table><thead><tr><th>과목</th><th>등급</th><th class="n">근거 대학</th><th>요구한 분야</th></tr></thead><tbody>
+  ${ms.map(m => `<tr><td><b>${esc(m.s)}</b></td><td class="nw">${esc(m.r)}</td><td class="n">${m.n}곳</td>
+    <td class="mut">${esc(m.f.filter(x => names.has(x)).join(', '))}</td></tr>`).join('')}
+  </tbody></table></div>
+  ${extra ? `<div class="note fine" style="margin-top:12px">공동교육과정·주문형 강좌: ${extra}</div>` : ''}`;
 }
