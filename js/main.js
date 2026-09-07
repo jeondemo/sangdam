@@ -12,6 +12,7 @@ import {
   placement, schoolJeongsiStats,
 } from './match.js';
 import * as R from './render.js';
+import { matchUnits, univKey } from './subject.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -32,7 +33,9 @@ const S = {
 };
 
 /* 과목 선택 화면의 상태 */
-const SEL = { picked: [], grade: 1, chosen: new Set(), openG: new Set(), sumOpen: false, stu: null };
+const SEL = { picked: [], grade: 1, chosen: new Set(), openG: new Set(), sumOpen: false, stu: null,
+  uFilter: 'all', uQ: '' };
+let uApps = null;   // 대학 이름 → 우리 학교 6개년 지원 건수
 
 /* ── 표지 조각 ─────────────────────────────────────── */
 
@@ -451,6 +454,9 @@ function runSel() {
     picked: SEL.picked, grade: SEL.grade, chosen: SEL.chosen, taken,
     choice: S.choice, sumOpen: SEL.sumOpen, openG: SEL.openG, stu: SEL.stu,
   });
+  const sb = selSubs();
+  $('s-pick').insertAdjacentHTML('beforeend', R.selGoBar(sb.chosen.length, sb.taken.length));
+  paintUnits();
   $('s-cond').innerHTML = R.selCond(S.sel, SEL.picked);
   $('s-miss').innerHTML = R.selMiss(S.sel, SEL.picked);
   $('c-scond').textContent = SEL.picked.reduce((a, f) => a + f.notes.length, 0) || '';
@@ -460,7 +466,49 @@ function runSel() {
 
 function selTab(t) {
   document.querySelectorAll('#seltabs .tab').forEach(x => x.setAttribute('aria-selected', String(x.dataset.s === t)));
-  ['pick', 'cond', 'miss'].forEach(k => $('s-' + k).classList.toggle('hidden', k !== t));
+  ['pick', 'cond', 'miss', 'univ'].forEach(k => $('s-' + k).classList.toggle('hidden', k !== t));
+}
+
+/* 지금 화면에 잡혀 있는 과목 — 고른 것 + (2학년이면) 이미 이수한 것 */
+function selSubs() {
+  const chosen = [...SEL.chosen].map(k => k.split('|')[2]);
+  const taken = (SEL.grade === 2 && SEL.stu) ? (SEL.stu.taken || []) : [];
+  return { chosen, taken, all: [...new Set(chosen.concat(taken))] };
+}
+
+/* 우리 학교 지원이 많은 대학을 위로 올리는 데 씁니다. */
+function univApps() {
+  if (uApps || !S.history) return uApps;
+  uApps = new Map();
+  for (const a of S.history.apps) {
+    const k = univKey(a.univ);
+    if (k) uApps.set(k, (uApps.get(k) || 0) + 1);
+  }
+  return uApps;
+}
+
+function paintUnits() {
+  if (!S.sel?.units?.length) {
+    $('s-univ').innerHTML = '<div class="empty">이 자료에는 대학별 원문 표가 없습니다. 관리자 화면에서 선택과목 엑셀을 다시 올려 주세요.</div>';
+    $('c-suniv').textContent = '';
+    return;
+  }
+  const res = matchUnits(S.sel, selSubs().all);
+  SEL.uFilter = 'all'; SEL.uQ = '';
+  $('s-univ').innerHTML = R.selUnits(res, { apps: univApps(), nUniv: S.sel.meta?.nUniv });
+  $('c-suniv').textContent = res.filter(r => r.st === 'full').length;
+}
+
+/* 표는 한 번만 그리고, 칩·검색은 줄을 감추는 것으로 처리합니다. */
+function filterUnits() {
+  let n = 0;
+  $('s-univ').querySelectorAll('tr.ur').forEach(tr => {
+    const ok = (SEL.uFilter === 'all' || tr.dataset.st === SEL.uFilter)
+      && (!SEL.uQ || tr.dataset.q.includes(SEL.uQ));
+    tr.classList.toggle('hidden', !ok);
+    if (ok) n++;
+  });
+  const e = $('unone'); if (e) e.hidden = n > 0;
 }
 
 function selPick(name) {
@@ -470,6 +518,9 @@ function selPick(name) {
   if (i >= 0) SEL.picked.splice(i, 1);
   else if (SEL.picked.length >= 3) return;
   else SEL.picked.push(f);
+  /* 분야가 바뀌면 새 상담입니다. 앞서 눌러 둔 과목은 비우고 빈칸에서 시작합니다. */
+  SEL.chosen.clear();
+  SEL.openG.clear();
   selPaint();
 }
 
@@ -847,6 +898,16 @@ $('s-pick').addEventListener('click', e => {
   if (more) { const k = more.dataset.m; SEL.openG.has(k) ? SEL.openG.delete(k) : SEL.openG.add(k); return runSel(); }
   const tog = e.target.closest('.moretog[data-sum]');
   if (tog) { SEL.sumOpen = !SEL.sumOpen; return runSel(); }
+  if (e.target.closest('#btn-univ')) selTab('univ');
+});
+$('s-univ').addEventListener('click', e => {
+  const b = e.target.closest('.chip[data-uf]'); if (!b) return;
+  $('s-univ').querySelectorAll('.chip[data-uf]').forEach(c => c.setAttribute('aria-pressed', 'false'));
+  b.setAttribute('aria-pressed', 'true'); SEL.uFilter = b.dataset.uf; filterUnits();
+});
+$('s-univ').addEventListener('input', e => {
+  if (e.target.id !== 'uq') return;
+  SEL.uQ = e.target.value.trim().toLowerCase(); filterUnits();
 });
 
 /* 배치 탭 안의 판정 칩·검색 */

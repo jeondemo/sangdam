@@ -2,7 +2,7 @@
 
 import { isPass, JUDGE } from './match.js';
 import { TIER_NAME, TIER_RANK, mergeSub, feasible, summaryOf, whereOf,
-  sciProgress, isSci, overCore, groupsFor } from './subject.js';
+  sciProgress, isSci, overCore, groupsFor, univKey } from './subject.js';
 
 /* 학급 코드는 306처럼 「학년+반」 세 자리입니다. 화면에는 「3학년 6반」으로 풉니다. */
 export const clsLabel = c => (c >= 100 ? `${Math.floor(c / 100)}학년 ${c % 100}반` : `${c}반`);
@@ -564,4 +564,77 @@ export function selMiss(sel, picked) {
     <td class="mut">${esc(m.f.filter(x => names.has(x)).join(', '))}</td></tr>`).join('')}
   </tbody></table></div>
   ${extra ? `<div class="note fine" style="margin-top:12px">공동교육과정·주문형 강좌: ${extra}</div>` : ''}`;
+}
+
+
+/* ── 이 조합으로 대학 보기 ─────────────────────────── */
+
+const UST = {
+  full: ['ok', '권장과목 모두 이수'],
+  later: ['later', '과목 더 들으면 충족'],
+  no: ['no', '우리 학교에 없는 과목'],
+  none: ['non', '지정 기준 없음'],
+};
+
+export function selGoBar(nChosen, nTaken) {
+  const n = nChosen + nTaken;
+  return `<div class="gobar">
+    <button class="gobtn" id="btn-univ"${n ? '' : ' disabled'}>이 조합으로 대학 보기 →</button>
+    <span class="gohint">${n
+      ? `지금 잡힌 <b>${n}과목</b>${nTaken ? ` <span class="fine">(고른 것 ${nChosen} · 이수한 것 ${nTaken})</span>` : ''}을
+         대학이 지정한 과목과 맞춰 봅니다.`
+      : '과목을 하나라도 고르면 켜집니다.'}</span>
+  </div>`;
+}
+
+export function selUnits(res, st) {
+  const c = { full: 0, later: 0, no: 0, none: 0 };
+  for (const r of res) c[r.st]++;
+  const A = st.apps || new Map();
+  const ORD = { full: 0, later: 1, no: 2, none: 3 };
+  const list = res.slice().sort((a, b) => (A.get(univKey(b.u)) || 0) - (A.get(univKey(a.u)) || 0)
+    || a.u.localeCompare(b.u) || ORD[a.st] - ORD[b.st] || a.d.localeCompare(b.d));
+
+  const rows = list.map(r => {
+    const [cls, txt] = UST[r.st];
+    const n = A.get(univKey(r.u));
+    const req = r.got.map(x => `<span class="sc g">${esc(x)}</span>`).join('')
+      + r.later.map(x => `<span class="sc l">${esc(x.s)}<i>${esc(x.w)}</i></span>`).join('')
+      + r.no.map(x => `<span class="sc m">${esc(x)}</span>`).join('')
+      || '<span class="fine">과목을 지정하지 않고 문장으로만 안내</span>';
+    const cnt = r.st === 'later' ? r.later.length : (r.st === 'no' ? r.no.length : 0);
+    return `<tr class="ur" data-st="${r.st}" data-q="${esc((r.u + ' ' + r.d).toLowerCase())}">
+      <td class="uu">${esc(r.u)}${n ? `<i>${n}건</i>` : ''}</td>
+      <td class="ud">${esc(r.d)}</td><td class="urq">${req}</td>
+      <td class="uj"><span class="vv ${cls}">${r.st === "later" ? `${cnt}` : ""}${txt}${r.st === "no" ? ` ${r.no.length}개` : ""}</span></td></tr>`;
+  }).join('');
+
+  const chip = (k, label, num) => `<button class="chip" data-uf="${k}" aria-pressed="${k === 'all'}">${label}${num != null ? ` <span class="c">${num}</span>` : ''}</button>`;
+
+  return `<div class="uwarn"><b>권장과목은 지원 자격이 아닙니다.</b>
+      대학이 「이런 과목을 들으면 좋다」고 안내한 것이지, 안 들으면 지원할 수 없다는 뜻이 아닙니다.
+      대부분 학생부 서류평가에서 참고 자료로 씁니다. 그래서 이 화면은 <b>가능·불가능</b>이 아니라
+      <b>이미 채운 것 / 앞으로 더 들을 것 / 우리 학교에 없는 것</b>으로 나눠 보여 줍니다.</div>
+
+    <div class="usum">
+      <div class="u1 a"><div class="v">${c.full}</div><div class="k">지금 조합으로 이미 충족</div></div>
+      <div class="u1 b"><div class="v">${c.later}</div><div class="k">남은 학기에 더 들으면 충족</div></div>
+      <div class="u1 d"><div class="v">${c.no}</div><div class="k">우리 학교에 없는 과목을 요구</div></div>
+      <div class="u1 c"><div class="v">${c.none}</div><div class="k">과목을 지정하지 않음</div></div>
+    </div>
+
+    <div class="ubar">${chip('all', '전체', res.length)}${chip('full', '이미 충족', c.full)}${chip('later', '더 들으면 충족', c.later)}${chip('no', '없는 과목 요구', c.no)}${chip('none', '기준 없음', c.none)}
+      <input type="search" id="uq" placeholder="대학·학과 찾기">
+      <span class="fine">우리 학교 지원이 많은 대학 순 · ${st.nUniv || 47}개 대학 ${res.length}개 모집단위</span></div>
+
+    <div class="tbl-wrap"><table class="utbl">
+      <thead><tr><th>대학</th><th>모집단위</th><th>대학이 지정한 과목</th><th>판정</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div class="note fine" id="unone" hidden>조건에 맞는 모집단위가 없습니다.</div>
+    <div class="note fine"><span class="sc g">초록</span> 이미 들었거나 지금 고른 과목 ·
+      <span class="sc l">파랑<i>2-2 B</i></span> 우리 학교에 있는데 아직 안 고른 과목(어느 학기·묶음인지 함께 표시) ·
+      <span class="sc m">빨강</span> 우리 학교에 개설되지 않은 과목.<br>
+      「수학」·「사회」처럼 교과군으로만 지정한 대학은 그 교과군에서 <b>선택과목을 한 과목이라도</b> 들었으면 이수로 봅니다
+      — 전원이 듣는 공통과목은 세지 않습니다.</div>`;
 }

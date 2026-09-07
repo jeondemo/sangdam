@@ -529,3 +529,51 @@ tr.pl.hidden{display:none}
 .more{padding:8px 14px;border-top:1px solid #eff3f8;background:#fbfcfe;font-size:11.5px;
   color:var(--accent);cursor:pointer;font-weight:700}
 .more:hover{background:#f3f7ff}
+
+/* ── 이 조합으로 대학 보기 ─────────────────────────── */
+.gobar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:18px 0 4px;padding:15px 18px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.gobtn{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:11px 20px;
+  font:700 15px/1 inherit;font-family:inherit;cursor:pointer}
+.gobtn:hover:not(:disabled){filter:brightness(1.08)}
+.gobtn:disabled{background:#e3e7ee;color:#9aa6b6;cursor:default}
+.gohint{font-size:13px;color:var(--sub)}
+.gohint b{color:var(--ink)}
+
+.uwarn{background:#fff8f0;border:1px solid #f0dcc2;border-left:3px solid #d08a2c;
+  border-radius:8px;padding:13px 16px;margin:0 0 16px;font-size:13.5px;line-height:1.65;color:#6a4a1c}
+.uwarn b{color:#4a3211}
+
+.usum{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:10px;margin:0 0 16px}
+.u1{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+.u1 .v{font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.15;
+  font-variant-numeric:tabular-nums}
+.u1 .k{font-size:12.5px;color:var(--sub);margin-top:3px;line-height:1.45}
+.u1.a .v{color:#1c7a52}
+.u1.b .v{color:#b0641a}
+.u1.c .v{color:#8b93a3}
+.u1.d .v{color:#c2372f}
+
+.ubar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px}
+.ubar .chip{border-radius:20px;padding:6px 14px;font-size:13px}
+.ubar .chip .c{font-variant-numeric:tabular-nums;opacity:.65;margin-left:2px}
+.ubar input[type=search]{flex:1;min-width:150px;max-width:230px;padding:7px 12px;font-size:13.5px}
+
+table.utbl td{vertical-align:top}
+td.uu{white-space:nowrap;font-weight:700;width:1%}
+td.uu i{display:block;font-style:normal;font-size:11px;color:var(--faint);font-weight:400}
+td.ud{white-space:nowrap;color:var(--sub)}
+td.urq{width:50%;min-width:220px}
+td.uj{white-space:nowrap;width:1%}
+.sc{font-size:12.5px;padding:2px 8px;border-radius:5px;white-space:nowrap;
+  display:inline-block;margin:1px 3px 1px 0;border:1px solid transparent}
+.sc.g{background:#e6f5ee;color:#1c7a52}
+.sc.l{background:#eef3ff;color:#2a51b8;border-color:#d3ddf8}
+.sc.l i{font-style:normal;font-size:10.5px;opacity:.75;margin-left:5px;
+  padding-left:5px;border-left:1px solid currentColor}
+.sc.m{background:#fdeceb;color:#c2372f;border-color:#f6cdca}
+.vv{font-size:12.5px;font-weight:700;padding:3px 9px;border-radius:6px;display:inline-block}
+.vv.ok{background:#e6f5ee;color:#1c7a52}
+.vv.later{background:#eef3ff;color:#2a51b8}
+.vv.no{background:#fdeceb;color:#c2372f}
+.vv.non{background:#f1f3f7;color:#8b93a3}

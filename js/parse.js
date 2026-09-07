@@ -448,6 +448,7 @@ const SEL_SHEETS = {
   cond: ['분야별조건', '분야별 조건'],
   cur: ['우리학교과목', '우리 학교 과목'],
   miss: ['미개설과목', '미개설 과목'],
+  unit: ['대학별원문', '대학별 원문'],
 };
 
 function sheetRows(wb, XLSX, names) {
@@ -557,10 +558,32 @@ export function parseSubjectTable(workbook, XLSX) {
     }
   }
 
+  /* 6) 대학별 원문 — 「이 조합으로 대학 보기」가 쓰는 표입니다.
+        같은 대학·모집단위가 학문분야마다 되풀이되므로 요구 과목이 같으면 한 줄로 묶습니다. */
+  out.units = [];
+  a = sheetRows(workbook, XLSX, SEL_SHEETS.unit);
+  if (a) {
+    h = headMap(a, { u: ['대학'], d: ['모집단위'], f: ['학문분야'], core: ['핵심과목'], rec: ['권장과목'], note: ['비고'] });
+    if (h) {
+      const seen = new Map();
+      for (let i = h.hi + 1; i < a.length; i++) {
+        const u = get(a[i], h.col, 'u'), d = get(a[i], h.col, 'd');
+        if (!u || !d) continue;
+        const core = get(a[i], h.col, 'core') || '', rec = get(a[i], h.col, 'rec') || '';
+        const key = `${u}|${d}|${core}|${rec}`;
+        const f = get(a[i], h.col, 'f') || '';
+        if (seen.has(key)) { const r = seen.get(key); if (f && !r.f.includes(f)) r.f.push(f); continue; }
+        const row = { u, d, core, rec, note: get(a[i], h.col, 'note') || '', f: f ? [f] : [] };
+        seen.set(key, row); out.units.push(row);
+      }
+    }
+  }
+
   const nF = out.order.length;
   if (!nF || !nRec) throw new Error('선택과목 자료를 읽지 못했습니다. 시트 이름과 머리글을 확인해 주세요.');
-  return { fields: out.fields, order: out.order, school: out.school, missing: out.missing,
-    meta: { nField: nF, nRec, nSub: Object.keys(out.school.kind).length, loadedAt: Date.now() } };
+  return { fields: out.fields, order: out.order, school: out.school, missing: out.missing, units: out.units,
+    meta: { nField: nF, nRec, nSub: Object.keys(out.school.kind).length,
+      nUnit: out.units.length, nUniv: new Set(out.units.map(x => x.u)).size, loadedAt: Date.now() } };
 }
 
 /* ── 학생 선택 결과 (학교 파일) ───────────────────────
