@@ -943,6 +943,14 @@ function bindChips(id, cb) {
   });
 }
 
+/* 탭을 손으로 누르면 탭 줄이 화면 맨 위로 오게 합니다.
+   표가 길어서, 아래쪽 버튼을 누르고 나면 한참을 되올려야 했습니다. */
+function toTop(el) {
+  if (!el) return;
+  const y = el.getBoundingClientRect().top + window.scrollY - 12;
+  window.scrollTo({ top: Math.max(0, y), behavior: 'auto' });
+}
+
 function selectTab(t) {
   document.querySelectorAll('#results .tab').forEach(x => x.setAttribute('aria-selected', String(x.dataset.t === t)));
   ['stu', 'univ', 'track', 'jg'].forEach(k => $('p-' + k).classList.toggle('hidden', k !== t));
@@ -1034,7 +1042,9 @@ $('selstu').addEventListener('change', () => {
   SEL.stu = v ? (S.choice?.students || []).find(x => x.cls === c && x.no === no) || null : null;
   runSel();
 });
-document.querySelectorAll('#seltabs .tab').forEach(t => t.addEventListener('click', () => selTab(t.dataset.s)));
+document.querySelectorAll('#seltabs .tab').forEach(t => t.addEventListener('click', () => {
+  selTab(t.dataset.s); toTop($('seltabs'));
+}));
 $('s-pick').addEventListener('click', e => {
   const sub = e.target.closest('.sub[data-s]');
   if (sub) { const k = sub.dataset.s; SEL.chosen.has(k) ? SEL.chosen.delete(k) : SEL.chosen.add(k); return runSel(); }
@@ -1042,7 +1052,7 @@ $('s-pick').addEventListener('click', e => {
   if (more) { const k = more.dataset.m; SEL.openG.has(k) ? SEL.openG.delete(k) : SEL.openG.add(k); return runSel(); }
   const tog = e.target.closest('.moretog[data-sum]');
   if (tog) { SEL.sumOpen = !SEL.sumOpen; return runSel(); }
-  if (e.target.closest('#btn-univ')) selTab('univ');
+  if (e.target.closest('#btn-univ')) { selTab('univ'); toTop($('seltabs')); }
 });
 $('s-univ').addEventListener('click', e => {
   const b = e.target.closest('.chip[data-uf]'); if (!b) return;
@@ -1092,7 +1102,9 @@ let timer = null;
 bindChips('gychips', b => { selGy = +b.dataset.gy; run(); });
 bindChips('modechips', b => setMode(b.dataset.mode));
 
-document.querySelectorAll('#results .tab').forEach(t => t.addEventListener('click', () => selectTab(t.dataset.t)));
+document.querySelectorAll('#results .tab').forEach(t => t.addEventListener('click', () => {
+  selectTab(t.dataset.t); toTop(t.closest('.tabs'));
+}));
 
 $('btn-roster').addEventListener('click', () => {
   if (S.mode === 'sel') $('f-choice').click();
