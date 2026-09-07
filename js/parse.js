@@ -307,3 +307,53 @@ export function gradeWeights(students) {
   for (const s of rows) err += Math.abs(w1 * s.g[0] + w2 * s.g[1] + w3 * s.g[2] - s.g[3]);
   return { w: [w1, w2, w3], mae: err / rows.length, n: rows.length };
 }
+
+/* ── 2학년 모의고사 성적표 (교육청 영역별 기준) ─────────── */
+
+/* 확장자는 .xls 이지만 실제로는 EUC-KR HTML 표입니다.
+   한 파일에 한 반이 들어오는 경우가 많아 여러 파일을 합쳐 쓸 수 있게 합니다.
+   열 순서(31칸):
+   순위 학급 번호 이름 | 국어(과목 원 표 백 등) | 수학(과목 원 표 백 등) | 영어(원 등) | 한국사(원 등)
+   | 탐1(과목 원 표 백 등) | 탐2(과목 원 표 백 등) | 제2외국어(과목 원 등) */
+export function parseMockExam(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const table = doc.querySelector('table');
+  if (!table) return { students: [], meta: { n: 0 } };
+
+  const headText = [...table.querySelectorAll('th')].map(th => th.textContent.trim()).join(' ');
+  if (!/국어/.test(headText) || !/탐구/.test(headText)) return { students: [], meta: { n: 0 } };
+
+  const out = [];
+  for (const tr of table.querySelectorAll('tr')) {
+    const td = [...tr.querySelectorAll('td')].map(x => x.textContent.replace(/ /g, ' ').trim());
+    if (td.length < 28) continue;
+    const nm = clean(td[3]);
+    const c = num(td[1]), no = num(td[2]);
+    if (!nm || c == null || no == null) continue;
+    const g = (i) => { const v = num(td[i]); return v != null && v > 0 ? v : null; };
+    out.push({
+      r: num(td[0]), c, no, nm,
+      grade: { k: g(8), m: g(13), e: g(15), h: g(17), s1: g(22), s2: g(27) },
+      pct:   { k: g(7), m: g(12), s1: g(21), s2: g(26) },
+      std:   { k: g(6), m: g(11), s1: g(20), s2: g(25) },
+      raw:   { k: g(5), m: g(10), e: g(14), h: g(16), s1: g(19), s2: g(24) },
+      subj:  { s1: clean(td[18]), s2: clean(td[23]) },
+    });
+  }
+  out.sort((a, b) => (a.c - b.c) || (a.no - b.no));
+  return { students: out, meta: { n: out.length, loadedAt: Date.now() } };
+}
+
+/* 여러 반 파일을 하나로 합칩니다. 같은 학급·번호는 나중 것으로 덮습니다. */
+export function mergeMockExam(a, b) {
+  const map = new Map();
+  for (const s of [...(a?.students || []), ...(b?.students || [])]) map.set(`${s.c}-${s.no}`, s);
+  const students = [...map.values()].sort((x, y) => (x.c - y.c) || (x.no - y.no));
+  return { students, meta: { n: students.length, loadedAt: Date.now() } };
+}
+
+export function pctAvg(p) {
+  if (!p) return null;
+  const v = [p.k, p.m, p.s1, p.s2].filter(x => x != null);
+  return v.length >= 3 ? v.reduce((s, x) => s + x, 0) / v.length : null;
+}

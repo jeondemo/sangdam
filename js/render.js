@@ -194,3 +194,120 @@ export function enableSort(root) {
     });
   });
 }
+
+/* ══ 정시 모드 ═══════════════════════════════════════ */
+
+const pctAvgOf = c => {
+  if (!c) return null;
+  const v = [c.pk, c.pm, c.ps1, c.ps2].filter(x => x != null);
+  return v.length >= 3 ? v.reduce((s, x) => s + x, 0) / v.length : null;
+};
+const stdSum = c => {
+  if (!c) return null;
+  const v = [c.sk, c.sm, c.ss1, c.ss2].filter(x => x != null);
+  return v.length === 4 ? v.reduce((s, x) => s + x, 0) : null;
+};
+
+/* 사이드바 — 2학년 모의고사 학생 카드 */
+export function mockCard(st, total) {
+  const g = st.grade, p = st.pct, s = st.std;
+  const f = x => (x == null ? '—' : x);
+  const avg = [p.k, p.m, p.s1, p.s2].filter(x => x != null);
+  const pa = avg.length ? (avg.reduce((a, b) => a + b, 0) / avg.length) : null;
+  const ss = [s.k, s.m, s.s1, s.s2].every(x => x != null) ? s.k + s.m + s.s1 + s.s2 : null;
+  return `<div class="who">${esc(st.nm)}<small>${st.c}학급 ${st.no}번</small></div>
+    <div class="rk">${st.r != null ? `${st.r}위 / ${total}명 · ` : ''}백분위 평균 <b class="up">${pa != null ? pa.toFixed(1) : '—'}</b>${ss != null ? ` · 표점합 ${ss}` : ''}</div>
+    <div class="mk">
+      <div class="mk-h"><span></span><span>국</span><span>수</span><span>영</span><span>탐1</span><span>탐2</span></div>
+      <div class="mk-r"><span>등급</span><b>${f(g.k)}</b><b>${f(g.m)}</b><b>${f(g.e)}</b><b>${f(g.s1)}</b><b>${f(g.s2)}</b></div>
+      <div class="mk-r"><span>백분위</span><b>${f(p.k)}</b><b>${f(p.m)}</b><b class="dim">—</b><b>${f(p.s1)}</b><b>${f(p.s2)}</b></div>
+      <div class="mk-r"><span>표점</span><b>${f(s.k)}</b><b>${f(s.m)}</b><b class="dim">—</b><b>${f(s.s1)}</b><b>${f(s.s2)}</b></div>
+    </div>
+    <div class="mk-sub">${esc(st.subj.s1 || '')}${st.subj.s2 ? ' · ' + esc(st.subj.s2) : ''}${g.h ? ` · 한국사 ${g.h}등급` : ''}</div>`;
+}
+
+export function jeongsiStatBar(sel, sum) {
+  const [lo, hi] = sum.pctRange;
+  return `
+  <div class="stat"><b>${sel.length}명</b><i>유사 졸업생 · 백분위 ${lo.toFixed(0)}~${hi.toFixed(0)}</i></div>
+  <div class="stat"><b>${sum.jg.length}건</b><i>정시 지원 (1인 평균 ${sum.cardsPerStudent.toFixed(1)}장)</i></div>
+  <div class="stat"><b class="ok">${pct1(sum.nPass, sum.jg.length)}%</b><i>정시 건별 합격률 (${sum.nPass}건)</i></div>
+  <div class="stat"><b class="brand">${pct(sum.stuPass.size, sum.stu.size)}%</b><i>1개 이상 합격 (${sum.stuPass.size}/${sum.stu.size}명)</i></div>`;
+}
+
+export function jeongsiHeadline(sum, sel, pctIn, eng, name, groups) {
+  const f = x => (x == null ? '·' : Math.round(x));
+  const best = groups.length ? [...groups].sort((a, b) => (b.h / b.n) - (a.h / a.n))[0] : null;
+  let s = (name ? `<span class="who-tag">${esc(name)}</span>` : '')
+    + `백분위 국 <b>${f(pctIn.k)}</b> · 수 <b>${f(pctIn.m)}</b> · 탐 <b>${f(pctIn.s1)}</b>·<b>${f(pctIn.s2)}</b>`
+    + (eng != null ? ` · 영어 <b>${eng}등급</b>` : '')
+    + ` 근처 졸업생 ${sel.length}명 기준입니다. 정시 ${sum.jg.length}장 중 ${sum.nPass}장이 합격으로 이어졌고, `
+    + `<b>${sum.stuPass.size}명(${pct(sum.stuPass.size, sum.stu.size)}%)</b>이 최소 한 곳에 붙었습니다.`;
+  if (best && best.n >= 5) s += ` 이 성적대에서는 <b>${esc(best.grp)}</b> 합격률이 가장 높았습니다(${pct(best.h, best.n)}%).`;
+  return `<div class="note">${s}</div>
+  <div class="note warn"><b>2학년 6월 모의고사 성적이 수능까지 유지된다는 가정</b>입니다.
+    교육청 모의고사는 재수생이 빠져 있고 범위도 좁아 실제 수능보다 백분위가 높게 나오는 경향이 있습니다.
+    목표 설정용으로 보시고 보수적으로 읽어 주세요.</div>`;
+}
+
+export function jeongsiStudents(sel, rows) {
+  let html = '', rank = 0;
+  for (const s of sel) {
+    rank++;
+    const mine = rows.filter(r => r.s.p.pk === s.p.pk);
+    if (!mine.length) continue;
+    const won = mine.filter(isPass);
+    const c = s.p.csat;
+    const pa = pctAvgOf(c), ss = stdSum(c);
+    const out = won.length
+      ? `<span class="out t-ok">${esc(won[0].a.univ)}${won.length > 1 ? ` 外 ${won.length - 1}` : ''}</span>`
+      : '<span class="out t-no">전체 불합</span>';
+    const f = x => (x == null ? '·' : Math.round(x));
+    const detail = c
+      ? `국 ${f(c.pk)} · 수 ${f(c.pm)} · 탐 ${f(c.ps1)}·${f(c.ps2)}${c.e != null ? ` · 영 ${c.e}등급` : ''}${ss != null ? ` · 표점합 ${ss}` : ''}`
+      : '<span style="opacity:.6">수능 기록 없음</span>';
+    html += `<div class="stu${won.length ? ' win' : ''}">
+      <div class="stu-h"><span class="idx">${rank}</span><span class="yr">${s.p.y}</span>
+        <span class="gpa">백분위 ${pa != null ? pa.toFixed(1) : '—'}</span>
+        <span class="csat">${detail}</span>${out}</div>
+      ${mine.map(r => appRow(r.a)).join('')}
+    </div>`;
+  }
+  return html ? `<div class="stugrid">${html}</div>` : '<div class="empty">표시할 정시 기록이 없습니다.</div>';
+}
+
+export function jeongsiUnivTable(list) {
+  if (!list.length) return '<div class="empty">집계할 정시 기록이 없습니다.</div>';
+  const item = (x, ok) => {
+    const bits = [];
+    if (x.pct != null) bits.push(`백 ${x.pct.toFixed(0)}`);
+    if (x.wait) bits.push(ok ? `추합 ${esc(x.wait)}` : `예비 ${esc(x.wait)}`);
+    return `<span class="dl${ok ? ' ok' : ''}">${esc(x.dept)}${bits.length ? ` <i>${bits.join(' · ')}</i>` : ''}</span>`;
+  };
+  return `<div class="note">유사 졸업생들이 실제로 지원한 대학입니다. 학과 옆 <b>백</b>은 그 졸업생의 백분위 4과목 평균,
+    <b>추합 n</b>은 호명된 예비번호, <b>예비 n</b>은 받았지만 호명되지 못한 번호입니다.</div>
+  <div class="tbl-wrap"><table data-sortable>
+  <thead><tr><th>대학</th><th>군</th><th class="n">지원</th><th class="n">합격</th><th>합격 학과</th><th>불합 학과</th></tr></thead>
+  <tbody>${list.map(o => `<tr>
+    <td>${esc(o.univ)}</td><td class="mut nw">${esc(o.grp)}</td>
+    <td class="n">${o.n}</td>
+    <td class="n ${o.h ? 'ok' : 'mut'}" data-v="${o.h}"><b>${o.h}</b></td>
+    <td class="dlist">${o.pass.map(x => item(x, true)).join('') || '<span class="mut">—</span>'}</td>
+    <td class="dlist">${o.fail.map(x => item(x, false)).join('') || '<span class="mut">—</span>'}</td>
+  </tr>`).join('')}</tbody></table></div>`;
+}
+
+export function groupTable(list, sum) {
+  if (!list.length) return '<div class="empty">집계할 기록이 없습니다.</div>';
+  const maxN = Math.max(1, ...list.map(o => o.n));
+  return `<div class="note">같은 성적대 졸업생들이 <b>가·나·다군에 어떻게 카드를 썼고 어디서 붙었는지</b>입니다.</div>
+  <div class="tbl-wrap"><table data-sortable>
+  <thead><tr><th>군</th><th class="n">지원</th><th class="n">지원 비중</th><th class="n">합격</th><th class="n">합격률</th></tr></thead>
+  <tbody>${list.map(o => `<tr>
+    <td><span class="bar" style="width:${Math.round((o.n / maxN) * 54)}px"></span><b>${esc(o.grp)}</b></td>
+    <td class="n">${o.n}</td>
+    <td class="n mut">${pct(o.n, sum.jg.length || 1)}%</td>
+    <td class="n ${o.h ? 'ok' : 'mut'}" data-v="${o.h}"><b>${o.h}</b></td>
+    <td class="n" data-v="${o.n ? o.h / o.n : 0}">${pct(o.h, o.n)}%</td>
+  </tr>`).join('')}</tbody></table></div>`;
+}

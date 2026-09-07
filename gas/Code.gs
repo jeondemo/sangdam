@@ -31,6 +31,7 @@ function 설치() {
     ]);
     설정.setColumnWidth(1, 120);
     설정.setColumnWidth(2, 420);
+    설정.getRange(2, 2, 5, 1).setNumberFormat('@');   // 값 칸은 글자로 고정
     설정.getRange(1, 1, 1, 2).setFontWeight('bold');
     설정.getRange(2, 1, 2, 1).setFontWeight('bold');
     설정.getRange(2, 2, 2, 1).setFontFamily('Roboto Mono');
@@ -81,9 +82,14 @@ function 값쓰기(항목, 값) {
   var sh = 설정시트();
   var v = sh.getDataRange().getValues();
   for (var i = 0; i < v.length; i++) {
-    if (String(v[i][0]).trim() === 항목) { sh.getRange(i + 1, 2).setValue(값); return; }
+    if (String(v[i][0]).trim() === 항목) {
+      // 글자로 고정합니다. 그렇지 않으면 시트가 날짜·숫자로 바꿔 버립니다.
+      sh.getRange(i + 1, 2).setNumberFormat('@').setValue(값);
+      return;
+    }
   }
   sh.appendRow([항목, 값]);
+  sh.getRange(sh.getLastRow(), 2).setNumberFormat('@');
 }
 
 function 응답(obj) {

@@ -140,3 +140,91 @@ export function baseline(history) {
     minNo: { n: minNo[0], rate: minNo[0] ? minNo[1] / minNo[0] : 0 },
   };
 }
+
+/* ── 정시 전용 매칭 ───────────────────────────────────
+   내신은 보지 않고 수능 백분위(국·수·탐1·탐2)와 영어 등급으로만 찾습니다.
+   정시 지원 이력이 있는 졸업생만 후보로 삼습니다. */
+
+const ENG_WEIGHT = 3;   // 영어 1등급 차이를 백분위 3점 차이로 칩니다
+
+function pctAvgOf(c) {
+  if (!c) return null;
+  const v = [c.pk, c.pm, c.ps1, c.ps2].filter(x => x != null);
+  return v.length >= 3 ? v.reduce((s, x) => s + x, 0) / v.length : null;
+}
+
+export function findSimilarJeongsi(index, opts) {
+  const { pct, eng, topN, minYear, gy, includeVocational } = opts;
+  const mine = [pct.k, pct.m, pct.s1, pct.s2];
+  const cand = [];
+  for (const p of index.persons) {
+    if (p.y < minYear) continue;
+    const c = p.csat;
+    if (!c) continue;
+    const theirs = [c.pk, c.pm, c.ps1, c.ps2];
+    const pairs = mine.map((v, i) => [v, theirs[i]]).filter(([a, b]) => a != null && b != null);
+    if (pairs.length < 3) continue;
+    const idxs = index.byPerson.get(p.pk) || [];
+    const jg = idxs.filter(i => index.apps[i].ph === 1);
+    if (!jg.length) continue;
+    if (gy >= 0 && !jg.some(i => index.apps[i].gy === gy)) continue;
+    let d = pairs.reduce((s, [a, b]) => s + Math.abs(a - b), 0) / pairs.length;
+    if (eng != null && c.e != null) d += ENG_WEIGHT * Math.abs(eng - c.e);
+    cand.push({ p, d, g: pctAvgOf(c) });
+  }
+  cand.sort((a, b) => a.d - b.d);
+  const sel = cand.slice(0, topN);
+
+  const rows = [];
+  for (const s of sel) {
+    for (const i of index.byPerson.get(s.p.pk) || []) {
+      const a = index.apps[i];
+      if (a.ph !== 1) continue;
+      if (!includeVocational && a.cat === 1) continue;
+      if (gy >= 0 && a.gy !== gy) continue;
+      rows.push({ a, s });
+    }
+  }
+  return { sel, rows };
+}
+
+export function summarizeJeongsi(sel, rows) {
+  const jg = rows.filter(r => r.a.ph === 1 && r.a.res != null);
+  const pass = jg.filter(isPass);
+  const stu = new Set(jg.map(r => r.s.p.pk)), stuPass = new Set(pass.map(r => r.s.p.pk));
+  const avgs = sel.map(s => s.g).filter(x => x != null);
+  return {
+    jg, nPass: pass.length, stu, stuPass,
+    pctRange: avgs.length ? [Math.min(...avgs), Math.max(...avgs)] : [0, 0],
+    cardsPerStudent: stu.size ? jg.length / stu.size : 0,
+  };
+}
+
+export function aggregateJeongsiUniv(jg) {
+  const m = new Map();
+  for (const r of jg) {
+    const k = `${r.a.univ}|${r.a.grp || ''}`;
+    if (!m.has(k)) m.set(k, { univ: r.a.univ, grp: r.a.grp || '', n: 0, h: 0, ps: [], pass: [], fail: [] });
+    const o = m.get(k);
+    o.n++;
+    const g = pctAvgOf(r.s.p.csat);
+    if (isPass(r)) {
+      o.h++;
+      if (g != null) o.ps.push(g);
+      o.pass.push({ dept: r.a.dept || '', pct: g, wait: r.a.res === '추합' ? r.a.wait : null });
+    } else {
+      o.fail.push({ dept: r.a.dept || '', pct: g, wait: r.a.wait });
+    }
+  }
+  return [...m.values()].sort((a, b) => b.h - a.h || b.n - a.n);
+}
+
+export function aggregateGroup(jg) {
+  const m = new Map([['가군', { grp: '가군', n: 0, h: 0 }], ['나군', { grp: '나군', n: 0, h: 0 }], ['다군', { grp: '다군', n: 0, h: 0 }]]);
+  for (const r of jg) {
+    const g = r.a.grp;
+    if (!m.has(g)) m.set(g, { grp: g || '기타', n: 0, h: 0 });
+    const o = m.get(g); o.n++; if (isPass(r)) o.h++;
+  }
+  return [...m.values()].filter(o => o.n);
+}

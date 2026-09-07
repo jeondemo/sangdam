@@ -38,23 +38,42 @@
 
       <div class="sb-scope" id="sb-scope"></div>
 
+      <div class="sbl">상담 유형</div>
+      <div class="chips mode" id="modechips">
+        <button class="chip" data-mode="susi" aria-pressed="true">수시·정시 <small>3학년</small></button>
+        <button class="chip" data-mode="jg" aria-pressed="false">정시만 <small>2학년 모의</small></button>
+      </div>
+
       <div class="sbl">학생 선택</div>
       <div class="row2"><select id="cls"></select><select id="stu"></select></div>
       <input type="search" id="q" placeholder="이름으로 찾기">
       <div id="stucard" class="sb-stu hidden"></div>
 
       <div class="sbl">성적 조건</div>
-      <div class="gpa-in">
-        <label>내신 전교과 <span class="req">*</span> <span id="gpanote" class="gpanote"></span></label>
-        <input type="number" id="gpa" step="0.01" min="1" max="9" placeholder="3.45">
+      <div id="in-susi">
+        <div class="gpa-in">
+          <label>내신 전교과 <span class="req">*</span> <span id="gpanote" class="gpanote"></span></label>
+          <input type="number" id="gpa" step="0.01" min="1" max="9" placeholder="3.45">
+        </div>
+        <label class="lbl">수능 / 모의고사 등급 <span class="wn">(선택)</span></label>
+        <div class="sg">
+          <div><label>국</label><input type="number" id="c_k" min="1" max="9"></div>
+          <div><label>수</label><input type="number" id="c_m" min="1" max="9"></div>
+          <div><label>영</label><input type="number" id="c_e" min="1" max="9"></div>
+          <div><label>탐1</label><input type="number" id="c_s1" min="1" max="9"></div>
+          <div><label>탐2</label><input type="number" id="c_s2" min="1" max="9"></div>
+        </div>
       </div>
-      <label class="lbl">수능 / 모의고사 등급 <span class="wn">(선택)</span></label>
-      <div class="sg">
-        <div><label>국</label><input type="number" id="c_k" min="1" max="9"></div>
-        <div><label>수</label><input type="number" id="c_m" min="1" max="9"></div>
-        <div><label>영</label><input type="number" id="c_e" min="1" max="9"></div>
-        <div><label>탐1</label><input type="number" id="c_s1" min="1" max="9"></div>
-        <div><label>탐2</label><input type="number" id="c_s2" min="1" max="9"></div>
+      <div id="in-jg" class="hidden">
+        <label class="lbl">백분위 <span class="req">*</span> <span class="wn">국·수·탐1·탐2 중 3개 이상</span></label>
+        <div class="sg4">
+          <div><label>국</label><input type="number" id="p_k" min="0" max="100"></div>
+          <div><label>수</label><input type="number" id="p_m" min="0" max="100"></div>
+          <div><label>탐1</label><input type="number" id="p_s1" min="0" max="100"></div>
+          <div><label>탐2</label><input type="number" id="p_s2" min="0" max="100"></div>
+        </div>
+        <label class="lbl">영어 등급 <span class="wn">(선택 · 절대평가)</span></label>
+        <div class="sg4"><div><input type="number" id="p_e" min="1" max="9" placeholder="등급"></div></div>
       </div>
 
       <label class="lbl">희망 계열</label>
@@ -94,9 +113,9 @@
       <div class="stats" id="stats"></div>
       <div id="headline"></div>
       <div class="tabs" role="tablist">
-        <button class="tab" role="tab" data-t="stu" aria-selected="true">유사 학생<span class="c" id="c-stu"></span></button>
-        <button class="tab" role="tab" data-t="univ" aria-selected="false">대학·전형<span class="c" id="c-univ"></span></button>
-        <button class="tab" role="tab" data-t="track" aria-selected="false">카드 배분</button>
+        <button class="tab" role="tab" data-t="stu" aria-selected="true"><span id="t-stu">유사 학생</span><span class="c" id="c-stu"></span></button>
+        <button class="tab" role="tab" data-t="univ" aria-selected="false"><span id="t-univ">대학·전형</span><span class="c" id="c-univ"></span></button>
+        <button class="tab" role="tab" data-t="track" aria-selected="false"><span id="t-track">카드 배분</span></button>
         <button class="tab" role="tab" data-t="jg" aria-selected="false">정시<span class="c" id="c-jg"></span></button>
       </div>
       <div id="p-stu"></div>
@@ -113,6 +132,7 @@
 
 <input type="file" id="f-roster" accept=".xlsx,.xls" hidden>
 <input type="file" id="f-history" accept=".xlsx,.xls" hidden>
+<input type="file" id="f-mock" accept=".xls,.xlsx,.html,.htm" multiple hidden>
 
 <script src="./vendor/xlsx.full.min.js"></script>
 <script type="module" src="./js/main.js"></script>
