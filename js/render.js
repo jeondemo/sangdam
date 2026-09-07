@@ -638,3 +638,60 @@ export function selUnits(res, st) {
       「수학」·「사회」처럼 교과군으로만 지정한 대학은 그 교과군에서 <b>선택과목을 한 과목이라도</b> 들었으면 이수로 봅니다
       — 전원이 듣는 공통과목은 세지 않습니다.</div>`;
 }
+
+/* ── 정시 배치 (대학 공개 정시 결과 기반) ─────────────
+   판정 옆의 합격률은 우리 학교 5개년 실제 결과로 맞춰 본 값입니다. */
+
+const JG_HIT = { 안정: 78, 적정: 76, 소신: 48, 상향: 13, 도전: 8 };
+const JG_ORDER = ['안정', '적정', '소신', '상향', '도전'];
+const JG_CLS = { 안정: 'j-safe', 적정: 'j-fit', 소신: 'j-try', 상향: 'j-up', 도전: 'j-far' };
+
+export function jgTable(res, opts = {}) {
+  const cnt = {}; let none = 0;
+  for (const r of res) { if (r.judge) cnt[r.judge] = (cnt[r.judge] || 0) + 1; else none++; }
+
+  const sign = d => (d > 0 ? '+' : '') + d.toFixed(1);
+  const trendOf = r => {
+    const t = opts.trend?.[`${r.rec.u}|${r.rec.g}|${r.rec.d}`];
+    if (!t) return '';
+    return Object.keys(t).sort().map(y => {
+      const v = t[y];
+      return v.c != null && v.f ? `<span class="tr"><i>${String(y).slice(2)}</i>${(100 * v.c / v.f).toFixed(1)}</span>` : '';
+    }).join('');
+  };
+
+  const rows = res.filter(r => r.judge).sort((a, b) => b.diff - a.diff).map(r => {
+    const k = r.rec, n = k.n, need = k.need;
+    return `<tr class="jgr" data-j="${r.judge}" data-q="${esc((k.u + ' ' + k.d).toLowerCase())}">
+      <td class="nw"><span class="jv ${JG_CLS[r.judge]}">${r.judge}</span></td>
+      <td class="nw b">${esc(k.u)}</td><td class="nw mut">${esc(k.g)}</td>
+      <td>${esc(k.d)}<span class="tf">${esc(k.t)}</span>${need ? `<span class="need">${esc(need)}</span>` : ''}</td>
+      <td class="n">${r.mine.toFixed(1)}</td>
+      <td class="n mut">${r.cut.toFixed(1)}</td>
+      <td class="n ${r.diff >= 0 ? 'ok' : 'no'}">${sign(r.diff)}</td>
+      <td class="n nw mut">${n ?? ''}명${k.comp ? ` · ${k.comp.toFixed(1)}:1` : ''}${k.wait != null ? ` · 충원 ${k.wait}` : ''}</td>
+      <td class="nw trend">${trendOf(r)}</td></tr>`;
+  }).join('');
+
+  const chip = (k, label, num, hit) => `<button class="chip" data-jf="${k}" aria-pressed="${k === '적정'}">${label}${num != null ? ` <span class="c">${num}</span>` : ''}${hit != null ? `<span class="hr">${hit}%</span>` : ''}</button>`;
+
+  return `<div class="jghead">
+      <div class="jgnote"><b>우리 학생 점수와 「70%컷 학생」 점수를 같은 식에 넣어 견준 것입니다.</b>
+        대학마다 환산식에 붙는 상수는 재현하지 않았습니다. 두 사람에게 똑같은 식을 쓰므로 앞뒤 순서는 유지되지만,
+        <b>점수 자체는 대학이 발표한 환산점수와 다릅니다.</b> 같은 줄 안에서 차이(±)만 보시고,
+        <b>줄과 줄 사이의 점수는 견주지 마십시오</b> — 대학마다 척도가 다릅니다.</div>
+      <div class="jgchips">${JG_ORDER.map(k => chip(k, k, cnt[k] || 0, JG_HIT[k])).join('')}
+        ${chip('all', '전체', res.filter(r => r.judge).length)}
+        <input type="search" id="jgq" placeholder="대학·학과 찾기">
+      </div>
+      <div class="jghint">칩 아래 %는 <b>우리 학교 5개년 정시 실제 합격률</b>입니다 — 같은 계산을 졸업생 지원 171건에 돌려 맞춰 봤습니다.</div>
+    </div>
+    <div class="tbl-wrap"><table class="jgtbl">
+      <thead><tr><th>판정</th><th>대학</th><th>군</th><th>모집단위</th><th class="n">내 점수<i>이 대학 기준</i></th>
+        <th class="n">70%컷</th><th class="n">차이</th><th class="n">모집·경쟁·충원</th><th>컷 추이</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <div class="note fine" id="jgnone" hidden>조건에 맞는 모집단위가 없습니다.</div>
+    <div class="note fine">${opts.meta ? `${opts.meta.year}학년도 · ${opts.meta.nUniv}개 대학 ${opts.meta.n.toLocaleString()}개 모집단위` : ''}
+      ${none ? ` · 과목별 컷을 공개하지 않아 <b>판정하지 못한 곳 ${none}개</b>` : ''}
+      ${opts.credit ? `<br>${esc(opts.credit)}` : ''}</div>`;
+}

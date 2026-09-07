@@ -66,6 +66,13 @@ export async function fetchCut(key) {
   return res.json();
 }
 
+/* 정시 지원가능 자료 — 없어도 프로그램은 돌아갑니다. */
+export async function fetchJG(key) {
+  const res = await fetch(url({ k: key, mode: 'jg' }));
+  if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
+  return res.json();
+}
+
 /* 선택과목 자료 — 없어도 프로그램은 돌아갑니다. */
 export async function fetchSel(key) {
   const res = await fetch(url({ k: key, mode: 'sel' }));

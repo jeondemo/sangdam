@@ -11,6 +11,7 @@ var SHEET_설정 = '설정';
 var SHEET_데이터 = '데이터';
 var SHEET_임시 = '임시';
 var SHEET_배치 = '배치';     // 정시 배치기준표 (대학 공개 입시결과)
+var SHEET_정시 = '정시';     // 정시 지원가능 자료 (대학 공개 정시 결과 + 반영 방식)
 var SHEET_선택 = '선택';     // 선택과목 자료 (대학 공개 권장과목 + 우리 학교 편제)
 var 조각크기 = 40000;   // 셀 하나에 5만 자까지 들어갑니다. 여유를 둡니다.
 
@@ -42,8 +43,10 @@ function 설치() {
   if (!ss.getSheetByName(SHEET_데이터)) ss.insertSheet(SHEET_데이터).hideSheet();
   if (!ss.getSheetByName(SHEET_임시)) ss.insertSheet(SHEET_임시).hideSheet();
   if (!ss.getSheetByName(SHEET_배치)) ss.insertSheet(SHEET_배치).hideSheet();
+  if (!ss.getSheetByName(SHEET_정시)) ss.insertSheet(SHEET_정시).hideSheet();
   if (!ss.getSheetByName(SHEET_선택)) ss.insertSheet(SHEET_선택).hideSheet();
   if (!값읽기('배치버전')) { 값쓰기('배치버전', '0'); 값쓰기('배치요약', ''); }
+  if (!값읽기('정시버전')) { 값쓰기('정시버전', '0'); 값쓰기('정시요약', ''); }
   if (!값읽기('선택버전')) { 값쓰기('선택버전', '0'); 값쓰기('선택요약', ''); }
 
   var 결과 = '설치 완료\n교사용키 : ' + 값읽기('교사용키') + '\n관리자키 : ' + 값읽기('관리자키');
@@ -122,13 +125,19 @@ function doGet(e) {
     var 버전 = 값읽기('버전');
 
     if (e.parameter.mode === 'version') {
-      return 응답({ ok: true, version: 버전, 요약: 값읽기('자료요약'), 갱신: 값읽기('최종갱신'), cutVersion: 값읽기('배치버전'), selVersion: 값읽기('선택버전') });
+      return 응답({ ok: true, version: 버전, 요약: 값읽기('자료요약'), 갱신: 값읽기('최종갱신'), cutVersion: 값읽기('배치버전'), selVersion: 값읽기('선택버전'), jgVersion: 값읽기('정시버전') });
     }
 
     if (e.parameter.mode === 'cut') {
       var cut = 시트읽기(SHEET_배치);
       if (!cut) return 응답({ ok: false, error: '배치기준표가 아직 없습니다.' });
       return 원문응답('{"ok":true,"version":' + JSON.stringify(값읽기('배치버전')) + ',"data":' + cut + '}');
+    }
+
+    if (e.parameter.mode === 'jg') {
+      var jg = 시트읽기(SHEET_정시);
+      if (!jg) return 응답({ ok: false, error: '정시 자료가 아직 없습니다.' });
+      return 원문응답('{"ok":true,"version":' + JSON.stringify(값읽기('정시버전')) + ',"data":' + jg + '}');
     }
 
     if (e.parameter.mode === 'sel') {
@@ -178,6 +187,7 @@ function doPost(e) {
         ok: true, 버전: 값읽기('버전'), 요약: 값읽기('자료요약'), 갱신: 값읽기('최종갱신'),
         배치요약: 값읽기('배치요약'), 배치갱신: 값읽기('배치갱신'),
         선택요약: 값읽기('선택요약'), 선택갱신: 값읽기('선택갱신'),
+        정시요약: 값읽기('정시요약'), 정시갱신: 값읽기('정시갱신'),
       });
     }
 
@@ -207,7 +217,8 @@ function doPost(e) {
       try { parsed = JSON.parse(text); }
       catch (err) { return 응답({ ok: false, error: '자료가 온전하지 않습니다. 다시 올려 주세요.' }); }
 
-      var 대상이름 = body.kind === 'cut' ? SHEET_배치 : (body.kind === 'sel' ? SHEET_선택 : SHEET_데이터);
+      var 대상이름 = body.kind === 'cut' ? SHEET_배치
+        : (body.kind === 'sel' ? SHEET_선택 : (body.kind === 'jg' ? SHEET_정시 : SHEET_데이터));
       var 데이터 = ss.getSheetByName(대상이름) || ss.insertSheet(대상이름).hideSheet();
       데이터.clear();
       var 조각 = [];
@@ -223,6 +234,14 @@ function doPost(e) {
         값쓰기('배치갱신', Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'));
         값쓰기('배치요약', 배치요약);
         return 응답({ ok: true, 요약: 배치요약 });
+      }
+      if (body.kind === 'jg') {
+        var 정시요약 = (m.nUniv || 0) + '개 대학 · ' + (m.n || 0) + '개 모집단위'
+          + (m.year ? ' · ' + m.year + '학년도' : '');
+        값쓰기('정시버전', String(Date.now()));
+        값쓰기('정시갱신', Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'));
+        값쓰기('정시요약', 정시요약);
+        return 응답({ ok: true, 요약: 정시요약 });
       }
       if (body.kind === 'sel') {
         var 선택요약 = (m.nField || (parsed.order || []).length) + '개 학문분야 · 권장과목 '

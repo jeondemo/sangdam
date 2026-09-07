@@ -10,7 +10,7 @@ import * as api from './api.js';
 import { encode, decode } from './codec.js';
 import {
   parseHistory, parseRoster, parseMockExam, mergeMockExam, pctAvg, examInfo, parseCutTable,
-  parseSubjectTable, parseSubjectChoice, mergeChoice,
+  parseSubjectTable, parseSubjectChoice, mergeChoice, parseJeongsiFile,
 } from './parse.js';
 import {
   buildIndex, findSimilar, summarize, aggregateUniv, aggregateTrack, aggregateJeongsi, csatAvg,
@@ -19,6 +19,7 @@ import {
 } from './match.js';
 import * as R from './render.js';
 import { matchUnits, univKey } from './subject.js';
+import { placementJG } from './jeongsi.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -33,6 +34,8 @@ const S = {
   cutVersion: null,
   school: null,   // 우리 학교 5개년 정시 지원 집계
   cases: [],      // 현재 화면의 유사 학생 사례 — 목록과 「크게 보기」가 함께 씁니다
+  jg: null,       // 정시 지원가능 자료 (대학 공개 정시 결과 + 반영 방식)
+  jgVersion: null,
   sel: null,      // 선택과목 자료 (대학 권장과목 + 우리 학교 편제) — 이름 없음
   selVersion: null,
   choice: null,   // 학생별 선택 결과 — 실명이 들어 있어 이 브라우저에만 둡니다
@@ -405,13 +408,24 @@ function runJeongsi() {
   $('p-track').innerHTML = R.groupTable(groups, sum);
   const myGrade = S.cur?.grade ? (() => { const g = [S.cur.grade.k, S.cur.grade.m, S.cur.grade.s1, S.cur.grade.s2].filter(x => x != null); return g.length ? g.reduce((a, b) => a + b, 0) / g.length : null; })() : null;
   if (!S.school) S.school = schoolJeongsiStats(S.index);
-  /* 배치 탭은 배치기준표를 올린 학교에서만 나타납니다. 없으면 탭 자체를 감춥니다. */
-  const pl = S.cut ? placement(S.cut, { pct, eng, myGrade, gy: selGy, similarRows: sum.jg, school: S.school }) : null;
+  /* 배치 탭 — 정시 자료가 있으면 그쪽으로, 없으면 예전 배치기준표로. 둘 다 없으면 탭을 감춥니다. */
+  const has = !!(S.jg || S.cut);
   const tabJg = document.querySelector('.tab[data-t="jg"]');
-  if (tabJg) tabJg.classList.toggle('hidden', !S.cut);
-  if (!S.cut && document.querySelector('.tab[data-t="jg"][aria-selected="true"]')) selectTab('stu');
-  $('p-jg').innerHTML = S.cut ? R.placementTable(pl, { exam: S.mock?.meta, cutMeta: S.cut.meta }) : '';
-  finish(sel, { univ: uni.length, jg: pl ? pl.list.length : '' });
+  if (tabJg) tabJg.classList.toggle('hidden', !has);
+  if (!has && document.querySelector('.tab[data-t="jg"][aria-selected="true"]')) selectTab('stu');
+  let nJg = '';
+  if (S.jg) {
+    jgRes = placementJG(S.jg.units, { pct, eng, his: S.cur?.grade?.h });
+    jgFilter = '적정'; jgQ = '';
+    $('p-jg').innerHTML = R.jgTable(jgRes, { trend: S.jg.trend, meta: S.jg.meta, credit: JG_CREDIT });
+    filterJG();
+    nJg = jgRes.filter(r => r.judge === '적정').length;
+  } else if (S.cut) {
+    const pl = placement(S.cut, { pct, eng, myGrade, gy: selGy, similarRows: sum.jg, school: S.school });
+    $('p-jg').innerHTML = R.placementTable(pl, { exam: S.mock?.meta, cutMeta: S.cut.meta });
+    nJg = pl.list.length;
+  } else $('p-jg').innerHTML = '';
+  finish(sel, { univ: uni.length, jg: nJg });
 }
 
 /* ── 선택과목 구성 ─────────────────────────────────── */
@@ -552,6 +566,20 @@ async function loadChoice(files) {
   }
 }
 
+/* 정시 배치 — 칩과 검색은 줄을 감추는 것으로 처리합니다. */
+let jgRes = [], jgFilter = '적정', jgQ = '';
+const JG_CREDIT = '정시 자료: YMABI 「27학년도 정시 지원가능 대학 및 학과 검색」 · 제작자 이용허락을 받아 씁니다.';
+
+function filterJG() {
+  let n = 0;
+  $('p-jg').querySelectorAll('tr.jgr').forEach(tr => {
+    const ok = (jgFilter === 'all' || tr.dataset.j === jgFilter) && (!jgQ || tr.dataset.q.includes(jgQ));
+    tr.classList.toggle('hidden', !ok);
+    if (ok) n++;
+  });
+  const e = $('jgnone'); if (e) e.hidden = n > 0;
+}
+
 /* ── 관리자 ────────────────────────────────────────── */
 
 function screenAdmin(status, msg) {
@@ -585,6 +613,19 @@ function screenAdmin(status, msg) {
           <button class="mini" id="c-send" disabled>시트에 반영</button></div>
       </div>
       <div class="cv-panel">
+        <div class="p-head"><span class="p-num">정</span><h2>정시 지원가능 자료</h2>
+          <span class="p-tag">${esc(status?.정시요약 || '아직 없음')}</span></div>
+        <div class="p-hint">62개 대학의 정시 결과와 수능 반영 방식이 든 파일(.xlsb)입니다.
+          매월 새 파일이 나오면 여기에 다시 올리면 됩니다.${status?.정시갱신 ? ` 최종 갱신 ${esc(status.정시갱신)}` : ''}<br>
+          ${esc(JG_CREDIT)}</div>
+        <div class="adm-row"><span class="n">1</span><span class="t"><b>정시 파일 올리기</b>
+          <span>26정시 · 25정시 · 24정시 시트가 있는 파일</span></span>
+          <button class="mini" id="j-pick">파일 선택</button></div>
+        <div class="adm-row"><span class="n">2</span><span class="t"><b>변환 확인</b>
+          <span id="j-parsed">파일을 올리면 모집단위 수를 확인합니다</span></span>
+          <button class="mini" id="j-send" disabled>시트에 반영</button></div>
+      </div>
+      <div class="cv-panel">
         <div class="p-head"><span class="p-num">선</span><h2>선택과목 자료</h2>
           <span class="p-tag">${esc(status?.선택요약 || '아직 없음')}</span></div>
         <div class="p-hint">대학이 공개한 <b>전공별 권장과목</b>과 우리 학교 편제를 담은 엑셀입니다.
@@ -603,6 +644,8 @@ function screenAdmin(status, msg) {
   $('a-send').addEventListener('click', sendHistory);
   $('c-pick').addEventListener('click', () => $('f-cut').click());
   $('c-send').addEventListener('click', sendCut);
+  $('j-pick').addEventListener('click', () => $('f-jg').click());
+  $('j-send').addEventListener('click', sendJG);
   $('s-pick2').addEventListener('click', () => $('f-sel').click());
   $('s-send').addEventListener('click', sendSel);
 }
@@ -636,6 +679,37 @@ async function sendCut() {
   } catch (e) {
     $('c-parsed').innerHTML = `<span style="color:#ff9c9c">${esc(e.message)}</span>`;
     $('c-send').disabled = false;
+  }
+}
+
+let pendingJG = null;
+
+async function pickJG(file) {
+  $('j-parsed').textContent = `${file.name} 읽는 중… (파일이 커서 몇 초 걸립니다)`;
+  try {
+    /* 필요한 시트만 읽습니다 — 전체를 읽으면 훨씬 오래 걸립니다. */
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', sheets: ['26정시', '25정시', '24정시'] });
+    const data = parseJeongsiFile(wb, XLSX);
+    pendingJG = data;
+    const m = data.meta;
+    $('j-parsed').innerHTML = `<b style="color:#e5ebfa">${m.nUniv}개 대학</b> · ${m.n.toLocaleString()}개 모집단위 · ${m.years.join('·')}학년도`;
+    $('j-send').disabled = false;
+  } catch (e) {
+    $('j-parsed').innerHTML = `<span style="color:#ff9c9c">읽지 못했습니다 — ${esc(e.message)}</span>`;
+    $('j-send').disabled = true;
+  }
+}
+
+async function sendJG() {
+  if (!pendingJG) return;
+  $('j-send').disabled = true;
+  try {
+    const res = await api.uploadData(S.admin, pendingJG, (i, n) => { $('j-parsed').textContent = `보내는 중 ${i}/${n}`; }, 'jg');
+    await store.del(store.KEY_JG);
+    screenAdmin(await api.adminStatus(S.admin).catch(() => null), `정시 자료 반영이 끝났습니다. ${esc(res.요약 || '')}`);
+  } catch (e) {
+    $('j-parsed').innerHTML = `<span style="color:#ff9c9c">${esc(e.message)}</span>`;
+    $('j-send').disabled = false;
   }
 }
 
@@ -712,10 +786,12 @@ async function loadHistory() {
     /* 이 컴퓨터에 남아 있는 자료를 먼저 붙입니다 — 화면이 뜬 뒤에 탭이 뒤늦게 나타나지 않도록.
        새 자료가 있는지는 뒤에서 조용히 확인합니다. */
     await loadCut();
+    await loadJG();
     await loadSel();
     api.fetchVersion(S.key).then(v => {
       if (v.version && v.version !== S.version) refresh();
       loadCut(v.cutVersion);
+      loadJG(v.jgVersion);
       loadSel(v.selVersion);
     }).catch(() => { /* 다음 접속 때 다시 확인합니다 */ });
     return;
@@ -726,6 +802,7 @@ async function loadHistory() {
   S.version = res.version;
   await store.set(store.KEY_DATA, { enc: res.data, version: res.version });
   await loadCut(null);
+  await loadJG(null);
   await loadSel(null);
 }
 
@@ -741,6 +818,25 @@ async function loadCut(serverVersion) {
     S.cut = res.data; S.cutVersion = res.version;
     await store.set(store.KEY_CUT, { data: res.data, version: res.version });
     if (S.mode === 'jg' && S.index && !$('app').classList.contains('hidden')) run();
+  } catch { /* 캐시가 있으면 그대로 씁니다 */ }
+}
+
+/* 정시 지원가능 자료 — 없어도 프로그램은 돌아갑니다. */
+async function loadJG(serverVersion) {
+  const cached = await store.get(store.KEY_JG);
+  const use = d => {
+    S.jg = d;
+    if (S.mode === 'jg' && S.index && !$('app').classList.contains('hidden')) run();
+  };
+  if (cached?.data) { S.jgVersion = cached.version; use(cached.data); }
+  if (serverVersion === undefined) return;
+  if (cached?.data && serverVersion && cached.version === serverVersion) return;
+  try {
+    const res = await api.fetchJG(S.key);
+    if (!res.ok || !res.data?.units) return;
+    S.jgVersion = res.version;
+    await store.set(store.KEY_JG, { data: res.data, version: res.version });
+    use(res.data);
   } catch { /* 캐시가 있으면 그대로 씁니다 */ }
 }
 
@@ -876,6 +972,7 @@ $('f-roster').addEventListener('change', e => { if (e.target.files[0]) loadRoste
 $('f-mock').addEventListener('change', e => { if (e.target.files.length) loadMock([...e.target.files]); e.target.value = ''; });
 $('f-history').addEventListener('change', e => { if (e.target.files[0]) pickHistory(e.target.files[0]); e.target.value = ''; });
 $('f-cut').addEventListener('change', e => { if (e.target.files[0]) pickCut(e.target.files[0]); e.target.value = ''; });
+$('f-jg').addEventListener('change', e => { if (e.target.files[0]) pickJG(e.target.files[0]); e.target.value = ''; });
 $('f-sel').addEventListener('change', e => { if (e.target.files[0]) pickSel(e.target.files[0]); e.target.value = ''; });
 $('f-choice').addEventListener('change', e => { if (e.target.files.length) loadChoice([...e.target.files]); e.target.value = ''; });
 
@@ -930,11 +1027,19 @@ function filterPlacement() {
   });
 }
 $('p-jg').addEventListener('click', e => {
+  const j = e.target.closest('.chip[data-jf]');
+  if (j) {
+    $('p-jg').querySelectorAll('.chip[data-jf]').forEach(c => c.setAttribute('aria-pressed', 'false'));
+    j.setAttribute('aria-pressed', 'true'); jgFilter = j.dataset.jf; return filterJG();
+  }
   const b = e.target.closest('#plchips .chip'); if (!b || b.disabled) return;
   b.parentElement.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
   b.setAttribute('aria-pressed', 'true'); filterPlacement();
 });
-$('p-jg').addEventListener('input', e => { if (e.target.id === 'plq') filterPlacement(); });
+$('p-jg').addEventListener('input', e => {
+  if (e.target.id === 'plq') filterPlacement();
+  if (e.target.id === 'jgq') { jgQ = e.target.value.trim().toLowerCase(); filterJG(); }
+});
 
 $('cls').addEventListener('change', fillStudents);
 $('q').addEventListener('input', fillStudents);

@@ -688,3 +688,77 @@ export function mergeChoice(list, sel) {
   for (const s of students) s.taken = [...new Set(Object.values(s.by).flat())];
   return { sem, students, meta: { n: students.length, sems: Object.keys(sem).sort(), loadedAt: Date.now() } };
 }
+
+/* ── 정시 지원가능 자료 (.xlsb) ─────────────────────
+   대학이 공개한 정시 결과와 반영 방식을 담은 파일입니다.
+   계산에 쓰는 칸만 뽑고, 원본을 그대로 옮기지 않습니다. */
+
+const JG_PICK = ['국수MAX', '국수MIN', '국수탐MAX', '국수탐MID', '국수탐MIN',
+  '국수영탐MAX', '국수영탐MID1', '국수영탐MID2', '국수영탐MIN', '수탐MAX', '국탐MAX', '국탐MIN',
+  '국영탐MAX', '국영탐MID', '수영탐MAX', '수영탐MID', '수영MAX', '국영MAX',
+  '국영수MAX', '국영수MID', '국영수MIN'];
+
+const JG_SHEETS = [['26정시', 2026], ['25정시', 2025], ['24정시', 2024]];
+
+function jgRows(wb, XLSX, name) {
+  const sh = wb.SheetNames.find(s => s.replace(/\s+/g, '') === name);
+  if (!sh) return null;
+  const a = XLSX.utils.sheet_to_json(wb.Sheets[sh], { header: 1, blankrows: false, defval: null });
+  if (!a.length) return null;
+  const h = a[0].map(v => clean(v) || '');
+  const I = n => h.indexOf(n);
+  const out = [];
+  for (const r of a.slice(1)) {
+    if (!r[1] || !r[4]) continue;
+    const g = n => { const i = I(n); return i < 0 ? null : num(r[i]); };
+    const rec = {
+      u: clean(r[1]), g: clean(r[2]) || '', t: clean(r[3]) || '', d: clean(r[4]),
+      n: g('모집인원'), comp: g('경쟁률'), wait: g('충원합격'),
+      cut70: g('수능(70% cut)'), full: g('만점'),
+      metric: clean(r[I('백분위/표준점수/변환표준점수/등급')]) || '',
+      p50: { k: g('국(50%cut)'), m: g('수(50%cut)'), s1: g('탐1(50%cut)'), s2: g('탐2(50%cut)'), e: g('영(50%cut)'), h: g('한(50%cut)') },
+      p70: { k: g('국(70%cut)'), m: g('수(70%cut)'), s1: g('탐1(70%cut)'), s2: g('탐2(70%cut)'), e: g('영(70%cut)'), h: g('한(70%cut)') },
+      w: { k: g('국어'), m: g('수학'), e: g('영어'), s1: g('탐1'), s2: g('탐2'), h: g('한국사') },
+      pick: {},
+      eng: Array.from({ length: 9 }, (_, i) => g(`영${i + 1}`)),
+      his: Array.from({ length: 9 }, (_, i) => g(`한${i + 1}`)),
+      need: clean(r[I('응시과목지정')]) || '',
+      bonus: clean(r[I('가산점')]) || '',
+    };
+    for (const c of JG_PICK) { const v = g(c); if (v != null) rec.pick[c] = v; }
+    if (rec.eng.every(v => v == null)) rec.eng = null;
+    if (rec.his.every(v => v == null)) rec.his = null;
+    out.push(rec);
+  }
+  return out;
+}
+
+export function parseJeongsiFile(workbook, XLSX) {
+  const years = {};
+  for (const [name, y] of JG_SHEETS) {
+    const rows = jgRows(workbook, XLSX, name);
+    if (rows && rows.length) years[y] = rows;
+  }
+  const ys = Object.keys(years).map(Number).sort((a, b) => b - a);
+  if (!ys.length) throw new Error('「26정시」 같은 학년도 시트를 찾지 못했습니다. 정시 지원가능 파일이 맞는지 확인해 주세요.');
+
+  const latest = ys[0];
+  const units = years[latest];
+  /* 지난 학년도는 컷 추이만 남깁니다 — 판정에는 최신 학년도를 씁니다. */
+  const key = r => `${r.u}|${r.g}|${r.d}`;
+  const trend = {};
+  for (const y of ys.slice(1)) {
+    for (const r of years[y]) {
+      const k = key(r);
+      (trend[k] = trend[k] || {})[y] = { c: r.cut70, f: r.full, n: r.n, r: r.comp, w: r.wait };
+    }
+  }
+  return {
+    units, trend, year: latest, years: ys,
+    meta: {
+      year: latest, years: ys, n: units.length,
+      nUniv: new Set(units.map(r => r.u)).size,
+      loadedAt: Date.now(),
+    },
+  };
+}
