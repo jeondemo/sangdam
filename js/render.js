@@ -20,7 +20,7 @@ export function csatStr(c) {
 
 const resTag = a => {
   if (a.res === '합격') return '<span class="tag t-ok">합격</span>';
-  if (a.res === '추합') return `<span class="tag t-wait">추합${a.wait ? ' ' + esc(a.wait) : ''}</span>`;
+  if (a.res === '추합') return '<span class="tag t-wait">추합</span>';
   if (a.res === '불합') return '<span class="tag t-no">불합</span>';
   return '';
 };
@@ -32,13 +32,19 @@ const minTag = a => {
   return '';
 };
 
-/* 예비번호를 받았지만 호명되지 못한 경우. 추합 컷을 가늠하는 근거가 됩니다. */
-const waitTag = a => (a.res === '불합' && a.wait)
-  ? `<span class="tag t-cut">예비 ${esc(a.wait)}</span>` : '';
+/* 예비번호는 호명 여부와 상관없이 결과 배지 앞에 둡니다.
+   그래야 「예비43 추합」과 「예비12 불합」이 같은 자리에서 비교됩니다. */
+const waitTag = a => (a.wait ? `<span class="tag t-cand">예비${esc(a.wait)}</span>` : '');
 
 const appRow = a => `<div class="app">
   <span class="tk">${esc(a.ph === 1 ? (a.grp || '정시') : (a.track || ''))}</span>
   <span class="nm"><span class="un">${esc(a.univ)}</span><span class="dp">${esc(a.dept || '')}</span></span>
+  <span class="rt">${minTag(a)}${waitTag(a)}${resTag(a)}</span></div>`;
+
+/* 크게 보기 창 안의 한 줄. 목록보다 글자를 키웁니다. */
+const bigRow = a => `<div class="md-r">
+  <span class="tk">${esc(a.ph === 1 ? (a.grp || '정시') : (a.track || ''))}</span>
+  <span class="nm"><span class="un">${esc(a.univ)}</span><div class="dp">${esc(a.dept || '')}</div></span>
   <span class="rt">${minTag(a)}${waitTag(a)}${resTag(a)}</span></div>`;
 
 /* ── 학생 카드 (좌측) ────────────────────────────────── */
@@ -91,26 +97,36 @@ export function headline(sum, sel, gpa, myAvg, studentName) {
 
 /* ── 탭 본문 ─────────────────────────────────────────── */
 
-export function similarStudents(sel, rows) {
-  let html = '', rank = 0;
+/* 유사 학생 한 명 = 사례 한 건. 목록과 「크게 보기」 창이 같은 배열을 씁니다. */
+export function buildCases(sel, rows, mode) {
+  const out = [];
   for (const s of sel) {
-    rank++;
     const mine = rows.filter(r => r.s.p.pk === s.p.pk);
     if (!mine.length) continue;
-    const su = mine.filter(r => r.a.ph === 0);
-    const jg = mine.filter(r => r.a.ph === 1);
-    const won = mine.filter(isPass);
-    const out = won.length
-      ? `<span class="out t-ok">${esc(won[0].a.univ)}${won[0].a.ph === 1 ? ' · 정시' : ''}${won.length > 1 ? ` 外 ${won.length - 1}` : ''}</span>`
-      : '<span class="out t-no">전체 불합</span>';
-    html += `<div class="stu${won.length ? ' win' : ''}">
-      <div class="stu-h"><span class="idx">${rank}</span><span class="yr">${s.p.y}</span>
-        <span class="gpa">내신 ${s.p.g[3] != null ? s.p.g[3].toFixed(2) : '—'}</span>
-        <span class="csat">${csatStr(s.p.csat)}</span>${out}</div>
-      ${su.map(r => appRow(r.a)).join('')}
-      ${jg.length ? `<div class="app sep"><span class="tk brand">정시</span><span class="mut">${jg.length}건</span></div>` + jg.map(r => appRow(r.a)).join('') : ''}
-    </div>`;
+    out.push({
+      p: s.p, mode,
+      su: mine.filter(r => r.a.ph === 0).map(r => r.a),
+      jg: mine.filter(r => r.a.ph === 1).map(r => r.a),
+      won: mine.filter(isPass).map(r => r.a),
+    });
   }
+  return out;
+}
+
+const outTag = c => (c.won.length
+  ? `<span class="out t-ok">${esc(c.won[0].univ)}${c.mode === 'susi' && c.won[0].ph === 1 ? ' · 정시' : ''}${c.won.length > 1 ? ` 外 ${c.won.length - 1}` : ''}</span>`
+  : '<span class="out t-no">전체 불합</span>');
+
+const ZOOM = '<span class="zoom">크게 보기</span>';
+
+export function similarStudents(cases) {
+  const html = cases.map((c, i) => `<div class="stu${c.won.length ? ' win' : ''}" data-case="${i}">
+    <div class="stu-h"><span class="idx">${i + 1}</span><span class="yr">${c.p.y}</span>
+      <span class="gpa">내신 ${c.p.g[3] != null ? c.p.g[3].toFixed(2) : '—'}</span>
+      <span class="csat">${csatStr(c.p.csat)}</span>${outTag(c)}${ZOOM}</div>
+    ${c.su.map(appRow).join('')}
+    ${c.jg.length ? `<div class="app sep"><span class="tk brand">정시</span><span class="mut">${c.jg.length}건</span></div>` + c.jg.map(appRow).join('') : ''}
+  </div>`).join('');
   return html ? `<div class="stugrid">${html}</div>` : '<div class="empty">표시할 지원 기록이 없습니다.</div>';
 }
 
@@ -253,30 +269,52 @@ export function jeongsiHeadline(sum, sel, pctIn, eng, name, groups, exam) {
   return `<div class="note">${s}</div>${warn}`;
 }
 
-export function jeongsiStudents(sel, rows) {
-  let html = '', rank = 0;
-  for (const s of sel) {
-    rank++;
-    const mine = rows.filter(r => r.s.p.pk === s.p.pk);
-    if (!mine.length) continue;
-    const won = mine.filter(isPass);
-    const c = s.p.csat;
-    const pa = pctAvgOf(c), ss = stdSum(c);
-    const out = won.length
-      ? `<span class="out t-ok">${esc(won[0].a.univ)}${won.length > 1 ? ` 外 ${won.length - 1}` : ''}</span>`
-      : '<span class="out t-no">전체 불합</span>';
-    const f = x => (x == null ? '·' : Math.round(x));
-    const detail = c
-      ? `국 ${f(c.pk)} · 수 ${f(c.pm)} · 탐 ${f(c.ps1)}·${f(c.ps2)}${c.e != null ? ` · 영 ${c.e}등급` : ''}${ss != null ? ` · 표점합 ${ss}` : ''}`
-      : '<span style="opacity:.6">수능 기록 없음</span>';
-    html += `<div class="stu${won.length ? ' win' : ''}">
-      <div class="stu-h"><span class="idx">${rank}</span><span class="yr">${s.p.y}</span>
+/* 정시 카드 머리의 백분위 상세. 크게 보기 창에서도 씁니다. */
+const jgDetail = c => {
+  if (!c) return '<span style="opacity:.6">수능 기록 없음</span>';
+  const f = x => (x == null ? '·' : Math.round(x));
+  const ss = stdSum(c);
+  return `국 ${f(c.pk)} · 수 ${f(c.pm)} · 탐 ${f(c.ps1)}·${f(c.ps2)}`
+    + `${c.e != null ? ` · 영 ${c.e}등급` : ''}${ss != null ? ` · 표점합 ${ss}` : ''}`;
+};
+
+export function jeongsiStudents(cases) {
+  const html = cases.map((c, i) => {
+    const pa = pctAvgOf(c.p.csat);
+    return `<div class="stu${c.won.length ? ' win' : ''}" data-case="${i}">
+      <div class="stu-h"><span class="idx">${i + 1}</span><span class="yr">${c.p.y}</span>
         <span class="gpa">백분위 ${pa != null ? pa.toFixed(1) : '—'}</span>
-        <span class="csat">${detail}</span>${out}</div>
-      ${mine.map(r => appRow(r.a)).join('')}
+        <span class="csat">${jgDetail(c.p.csat)}</span>${outTag(c)}${ZOOM}</div>
+      ${c.su.concat(c.jg).map(appRow).join('')}
     </div>`;
-  }
+  }).join('');
   return html ? `<div class="stugrid">${html}</div>` : '<div class="empty">표시할 정시 기록이 없습니다.</div>';
+}
+
+/* ── 사례 크게 보기 ─────────────────────────────────── */
+
+export function caseView(c, i, n) {
+  const pa = pctAvgOf(c.p.csat);
+  const big = c.mode === 'jg'
+    ? `백분위 ${pa != null ? pa.toFixed(1) : '—'}<small>내신 ${c.p.g[3] != null ? c.p.g[3].toFixed(2) : '—'}</small>`
+    : `내신 ${c.p.g[3] != null ? c.p.g[3].toFixed(2) : '—'}<small>${pa != null ? `수능 백분위 ${pa.toFixed(1)}` : '수능 기록 없음'}</small>`;
+  const chips = c.mode === 'jg'
+    ? jgDetail(c.p.csat).split(' · ').map(x => `<span>${x}</span>`).join('')
+    : [[0, '1학년'], [1, '2학년'], [2, '3학년']]
+      .map(([k, t]) => `<span>${t} ${c.p.g[k] != null ? c.p.g[k].toFixed(2) : '—'}</span>`).join('')
+      + (c.p.csat ? `<span>${jgDetail(c.p.csat)}</span>` : '');
+  const res = c.won.length
+    ? `합격 ${c.won.length}건 — ${c.won.map(a => esc(a.univ) + (a.dept ? ' ' + esc(a.dept) : '')).join(', ')}`
+    : '합격 없음 — 전체 불합';
+  const grp = (t, arr) => (arr.length ? `<div class="md-g">${t}</div>` + arr.map(bigRow).join('') : '');
+  return {
+    win: c.won.length > 0,
+    cnt: `${i + 1} / ${n}`,
+    yr: `${c.p.y}학년도`,
+    big, chips,
+    res, resNo: !c.won.length,
+    body: grp(`수시 ${c.su.length}장`, c.su) + grp(`정시 ${c.jg.length}건`, c.jg),
+  };
 }
 
 export function jeongsiUnivTable(list) {
@@ -284,11 +322,11 @@ export function jeongsiUnivTable(list) {
   const item = (x, ok) => {
     const bits = [];
     if (x.pct != null) bits.push(`백 ${x.pct.toFixed(0)}`);
-    if (x.wait) bits.push(ok ? `추합 ${esc(x.wait)}` : `예비 ${esc(x.wait)}`);
+    if (x.wait) bits.push(`예비${esc(x.wait)}${ok ? ' 추합' : ''}`);
     return `<span class="dl${ok ? ' ok' : ''}">${esc(x.dept)}${bits.length ? ` <i>${bits.join(' · ')}</i>` : ''}</span>`;
   };
   return `<div class="note">유사 졸업생들이 실제로 지원한 대학입니다. 학과 옆 <b>백</b>은 그 졸업생의 백분위 4과목 평균,
-    <b>추합 n</b>은 호명된 예비번호, <b>예비 n</b>은 받았지만 호명되지 못한 번호입니다.</div>
+    <b>예비 n 추합</b>은 그 번호로 호명된 것, 불합 쪽의 <b>예비 n</b>은 번호를 받고도 호명되지 못한 것입니다.</div>
   <div class="tbl-wrap"><table data-sortable>
   <thead><tr><th>대학</th><th>군</th><th class="n">지원</th><th class="n">합격</th><th>합격 학과</th><th>불합 학과</th></tr></thead>
   <tbody>${list.map(o => `<tr>

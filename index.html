@@ -85,12 +85,6 @@
         <button class="chip" data-gy="3">예체능</button>
       </div>
 
-      <label class="lbl">지원 유형</label>
-      <div class="chips" id="catchips">
-        <button class="chip" data-cat="0" aria-pressed="true">4년제만</button>
-        <button class="chip" data-cat="-1">전문대 포함</button>
-      </div>
-
       <div class="row2 mt">
         <div><label class="lbl">유사 학생 수</label>
           <select id="topn"><option>10</option><option>15</option><option selected>20</option><option>30</option><option>50</option></select></div>
@@ -128,6 +122,27 @@
       <span class="fine">명단에 없으면 내신 전교과를 직접 입력해도 됩니다.</span>
     </div>
   </main>
+</div>
+
+<!-- 사례 하나를 크게 보는 창. 목록에서 카드를 누르면 열립니다. -->
+<div class="mask" id="mask" role="dialog" aria-modal="true" aria-label="졸업생 사례">
+  <div class="md" id="md">
+    <div class="md-h">
+      <span class="cnt" id="md-cnt"></span><span class="yr" id="md-yr"></span>
+      <button class="md-x" id="md-x" title="닫기" aria-label="닫기">✕</button>
+    </div>
+    <div class="md-s">
+      <div class="big" id="md-big"></div>
+      <div class="sc" id="md-sc"></div>
+      <div class="res" id="md-res"></div>
+    </div>
+    <div class="md-b" id="md-b"></div>
+    <div class="md-f">
+      <button class="md-nav" id="md-prev">← 이전 사례</button>
+      <button class="md-nav" id="md-next">다음 사례 →</button>
+      <button class="md-nav close" id="md-close">닫기</button>
+    </div>
+  </div>
 </div>
 
 <input type="file" id="f-roster" accept=".xlsx,.xls" hidden>

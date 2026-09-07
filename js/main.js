@@ -22,6 +22,7 @@ const S = {
   cut: null,      // 정시 배치기준표 (대학 공개 입시결과)
   cutVersion: null,
   school: null,   // 우리 학교 5개년 정시 지원 집계
+  cases: [],      // 현재 화면의 유사 학생 사례 — 목록과 「크게 보기」가 함께 씁니다
 };
 
 /* ── 표지 조각 ─────────────────────────────────────── */
@@ -286,7 +287,9 @@ function onStudentChange() {
 /* ── 분석 ──────────────────────────────────────────── */
 
 const numOf = id => { const v = parseFloat($(id).value); return isNaN(v) ? null : v; };
-let selGy = -1, includeVoc = false;
+let selGy = -1;
+/* 전문대 지원 기록은 데이터에 남아 있지만 화면에서는 4년제만 봅니다. */
+const includeVoc = false;
 
 function showEmpty(msg) {
   $('results').classList.add('hidden');
@@ -296,6 +299,7 @@ function showEmpty(msg) {
 
 function run() {
   if (!S.index) return;
+  caseClose();  /* 목록이 다시 그려지면 번호가 바뀌므로 열려 있던 창은 닫습니다. */
   return S.mode === 'jg' ? runJeongsi() : runSusi();
 }
 
@@ -331,7 +335,8 @@ function runSusi() {
   $('rnote').textContent = `내신 ${lo.toFixed(2)}~${hi.toFixed(2)} 구간 졸업생 ${sel.length}명 기준`;
   $('stats').innerHTML = R.statBar(sel, sum);
   $('headline').innerHTML = R.headline(sum, sel, gpa, myAvg, S.cur?.nm);
-  $('p-stu').innerHTML = R.similarStudents(sel, rows);
+  S.cases = R.buildCases(sel, rows, 'susi');
+  $('p-stu').innerHTML = R.similarStudents(S.cases);
   const uni = aggregateUniv(sum.su);
   $('p-univ').innerHTML = R.univTable(uni);
   $('p-track').innerHTML = R.trackTable(aggregateTrack(sum.su), sum);
@@ -354,7 +359,8 @@ function runJeongsi() {
   $('rnote').textContent = `백분위 평균 ${lo.toFixed(0)}~${hi.toFixed(0)} 구간 졸업생 ${sel.length}명 · 정시 지원만`;
   $('stats').innerHTML = R.jeongsiStatBar(sel, sum);
   $('headline').innerHTML = R.jeongsiHeadline(sum, sel, pct, eng, S.cur?.nm, groups, S.mock?.meta);
-  $('p-stu').innerHTML = R.jeongsiStudents(sel, rows);
+  S.cases = R.buildCases(sel, rows, 'jg');
+  $('p-stu').innerHTML = R.jeongsiStudents(S.cases);
   const uni = aggregateJeongsiUniv(sum.jg);
   $('p-univ').innerHTML = R.jeongsiUnivTable(uni);
   $('p-track').innerHTML = R.groupTable(groups, sum);
@@ -555,6 +561,62 @@ function selectTab(t) {
   ['stu', 'univ', 'track', 'jg'].forEach(k => $('p-' + k).classList.toggle('hidden', k !== t));
 }
 
+/* ── 사례 크게 보기 ────────────────────────────────────
+   목록에서 카드를 누르면 열립니다. ← → 로 넘기고 Esc로 닫습니다. */
+
+let caseAt = -1;
+
+function caseOpen(i) {
+  if (!S.cases.length) return;
+  caseAt = Math.max(0, Math.min(i, S.cases.length - 1));
+  casePaint();
+  $('mask').classList.add('on');
+  $('md-next').focus();
+}
+
+function caseClose() {
+  $('mask').classList.remove('on');
+  caseAt = -1;
+}
+
+function caseGo(d) {
+  const n = caseAt + d;
+  if (n < 0 || n >= S.cases.length) return;
+  caseAt = n;
+  casePaint();
+}
+
+function casePaint() {
+  const v = R.caseView(S.cases[caseAt], caseAt, S.cases.length);
+  $('md').classList.toggle('win', v.win);
+  $('md-cnt').textContent = v.cnt;
+  $('md-yr').textContent = v.yr;
+  $('md-big').innerHTML = v.big;
+  $('md-sc').innerHTML = v.chips;
+  $('md-res').className = 'res' + (v.resNo ? ' no' : '');
+  $('md-res').textContent = v.res;
+  $('md-b').innerHTML = v.body;
+  $('md-b').scrollTop = 0;
+  $('md-prev').disabled = caseAt === 0;
+  $('md-next').disabled = caseAt === S.cases.length - 1;
+}
+
+$('p-stu').addEventListener('click', e => {
+  const card = e.target.closest('.stu[data-case]');
+  if (card) caseOpen(+card.dataset.case);
+});
+$('md-prev').addEventListener('click', () => caseGo(-1));
+$('md-next').addEventListener('click', () => caseGo(1));
+$('md-x').addEventListener('click', caseClose);
+$('md-close').addEventListener('click', caseClose);
+$('mask').addEventListener('click', e => { if (e.target === $('mask')) caseClose(); });
+document.addEventListener('keydown', e => {
+  if (!$('mask').classList.contains('on')) return;
+  if (e.key === 'Escape') { caseClose(); return; }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); caseGo(-1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); caseGo(1); }
+});
+
 $('f-roster').addEventListener('change', e => { if (e.target.files[0]) loadRoster(e.target.files[0]); e.target.value = ''; });
 $('f-mock').addEventListener('change', e => { if (e.target.files.length) loadMock([...e.target.files]); e.target.value = ''; });
 $('f-history').addEventListener('change', e => { if (e.target.files[0]) pickHistory(e.target.files[0]); e.target.value = ''; });
@@ -588,7 +650,6 @@ let timer = null;
   $(id).addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 350); }));
 
 bindChips('gychips', b => { selGy = +b.dataset.gy; run(); });
-bindChips('catchips', b => { includeVoc = b.dataset.cat === '-1'; run(); });
 bindChips('modechips', b => setMode(b.dataset.mode));
 
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => selectTab(t.dataset.t)));
