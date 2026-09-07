@@ -257,7 +257,7 @@ function setMode(mode) {
   $('selview').classList.add('hidden');
   $('results').classList.toggle('hidden', true);
   $('btn-roster').textContent = isSel ? '학년별 선택 결과 올리기'
-    : (mode === 'jg' ? '모의고사 성적표 올리기' : '학생부성적표 다시 올리기');
+    : (mode === 'jg' ? '모의고사 성적표 다시 올리기' : '학생부성적표 다시 올리기');
   if (isSel) {
     $('placeholder').classList.remove('hidden');
     fillSelStudents();
@@ -1113,8 +1113,8 @@ document.querySelectorAll('#results .tab').forEach(t => t.addEventListener('clic
 }));
 
 $('btn-roster').addEventListener('click', () => {
+  /* 성적표는 표지에서 올립니다 — 수시·정시와 정시만 모두 같은 자리로 보냅니다. */
   if (S.mode === 'sel') $('f-choice').click();
-  else if (S.mode === 'jg') $('f-mock').click();
   else screenUpload();
 });
 $('btn-wipe').addEventListener('click', async () => {
