@@ -1,4 +1,10 @@
-import { GAS_URL, SCHOOL, ROSTER_STEPS } from '../config.js';
+import * as CFG from '../config.js';
+const { GAS_URL, SCHOOL, ROSTER_STEPS } = CFG;
+/* 모의고사 성적표 받는 경로. config.js 에 MOCK_STEPS 를 넣으면 그쪽이 우선합니다. */
+const MOCK_STEPS = CFG.MOCK_STEPS || [
+  '김영일 컨설팅 로그인', '성적관리', '모의고사 성적 업로드',
+  '성적분석', '영역별 기준 수능성적표', '본인 학급', '보기', '하단 다운로드로 엑셀파일 받기',
+];
 import * as store from './store.js';
 import * as api from './api.js';
 import { encode, decode } from './codec.js';
@@ -43,8 +49,6 @@ const LEFT = () => `<div>
   <div class="cv-since">${esc(SCHOOL.since)}</div>
   <div class="cv-title">${esc(SCHOOL.title[0])}<br><span class="accent">${esc(SCHOOL.title[1])}</span></div>
   <div class="cv-en">${esc(SCHOOL.titleEn)}</div>
-  <div class="cv-desc">우리 학교 <b>5개년 지원 결과</b>에서 성적이 비슷했던 졸업생을 찾아
-    어디에 지원해 어떤 결과를 받았는지 보여줍니다.</div>
   <div class="cv-feats" id="cv-feats"></div>
   <div class="cv-motto"><div class="m">${esc(SCHOOL.motto[0])}</div><div class="m"><b>${esc(SCHOOL.motto[1])}</b></div></div>
 </div>`;
@@ -65,11 +69,12 @@ function feats() {
   el.innerHTML = rows.map(([a, b]) => `<div class="cv-feat"><b>${esc(a)}</b><span>${esc(b)}</span></div>`).join('');
 }
 
-const HOWTO = `<div class="howto">
-  <div class="h"><span class="tk2"></span>학생자료 받는 방법</div>
-  <div class="path">${ROSTER_STEPS.map((s, i) =>
-    `${i ? '<span class="arw">›</span>' : ''}<span class="s ${i === 0 ? 'a' : i === ROSTER_STEPS.length - 1 ? 'z' : ''}">${esc(s)}</span>`).join('')}</div>
-</div>`;
+/* 처음에는 접혀 있습니다. 제목을 누르면 펴집니다. */
+const howto = steps => `<details class="howto">
+  <summary><span class="tk2"></span>자료 받는 방법<span class="arw2">▾</span></summary>
+  <div class="path">${steps.map((s, i) =>
+    `${i ? '<span class="arw">›</span>' : ''}<span class="s ${i === 0 ? 'a' : i === steps.length - 1 ? 'z' : ''}">${esc(s)}</span>`).join('')}</div>
+</details>`;
 
 const SHIELD = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
   style="width:13px;height:13px"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/></svg>`;
@@ -111,18 +116,18 @@ function screenUpload(err) {
   const tag = d => d ? `<span class="p-tag">${esc(d.meta.label || '')} ${d.meta.n}명 불러옴</span>` : '';
   cover(`<div class="cv-main">${LEFT()}
     <div>
-      <div class="cv-panel">
+      <div class="cv-panel one">
         <div class="p-head"><span class="p-num">1</span><h2>5개년 지원결과</h2>
+          <span class="p-line">지원 ${m.nApps.toLocaleString()}건 · 학생 ${m.nPersons.toLocaleString()}명 —
+            자동으로 들어옵니다. 따로 올리실 것 없습니다.</span>
           <span class="p-tag">불러옴</span></div>
-        <div class="p-hint">${esc(m.years[0])}~${esc(m.years[m.years.length - 1])}학년도 ·
-          지원 ${m.nApps.toLocaleString()}건 · 학생 ${m.nPersons.toLocaleString()}명<br>
-          이 자료는 자동으로 들어옵니다. 따로 올리실 것 없습니다.</div>
       </div>
 
+      <div class="cv-pair">
       <div class="cv-panel">
         <div class="p-head"><span class="p-num">2</span><h2>학생부성적표 · 수시·정시 상담</h2>${tag(S.roster)}</div>
-        <div class="p-hint">내신이 든 학생부성적표를 올리면 학급·이름으로 학생을 골라 상담할 수 있습니다. 학년은 파일에서 자동으로 읽습니다.</div>
-        ${HOWTO}
+        <div class="p-hint">내신이 포함된 학생부 성적표를 김영일 컨설팅에서 내려받아 올리면 자동으로 읽습니다.</div>
+        ${howto(ROSTER_STEPS)}
         <div class="dropzone" id="dz">
           <strong>파일을 끌어다 놓거나 클릭해서 선택</strong>
           <div class="dz-hint">○○○○년 학생부성적표 … ○학년.xlsx</div>
@@ -132,20 +137,20 @@ function screenUpload(err) {
       </div>
 
       <div class="cv-panel">
-        <div class="p-head"><span class="p-num">3</span><h2>모의고사 성적표 · 정시 상담</h2>${tag(S.mock)}
-          ${S.mock ? '' : '<span class="p-tag" style="opacity:.6">선택</span>'}</div>
-        <div class="p-hint">교육청·평가원 영역별 기준 수능성적표(.xls)를 올리면 모의고사 성적으로 정시만 상담할 수 있습니다.
-          어느 학년이든 됩니다. 반별 파일이면 여러 개를 한꺼번에 골라도 됩니다.</div>
+        <div class="p-head"><span class="p-num">3</span><h2>모의고사 성적표 · 정시 상담</h2>${tag(S.mock)}</div>
+        <div class="p-hint">모의고사 성적을 김영일 컨설팅에 올린 뒤, 김영일 사이트에서 내려받아 여기에 올리면 됩니다.</div>
+        ${howto(MOCK_STEPS)}
         <div class="dropzone" id="dz2">
           <strong>파일을 끌어다 놓거나 클릭해서 선택</strong>
           <div class="dz-hint">○○○○년 ○월 교육청 영역별 기준 수능성적표 … ○학년.xls</div>
           <div class="dz-tags"><span class="dz-tag">등급·백분위·표준점수</span><span class="dz-tag">반별 파일 여러 개 가능</span></div>
         </div>
       </div>
+      </div>
 
       <label class="opt"><input type="checkbox" id="keep" checked>
-        <span><span class="t">이 컴퓨터에 명단 저장</span>
-        <span class="d">다음부터 이 화면 없이 바로 상담 화면으로 들어갑니다. 공용 PC에서는 체크를 해제하세요.</span></span></label>
+        <span class="t">체크를 하시면 다음 접속 때부터 이 화면 없이 바로 상담 화면으로 들어갑니다.
+          <b>공용 PC에서는 체크를 하지 마세요.</b></span></label>
       ${err ? `<div class="cv-err">${esc(err)}</div>` : ''}
       ${(S.roster || S.mock) ? '<button class="mini" id="btn-go" style="width:100%;margin-top:12px;padding:10px">상담 화면으로</button>' : ''}
       <div class="cv-safe">${SHIELD} 명단은 이 브라우저 안에서만 열립니다</div>

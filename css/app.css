@@ -53,13 +53,16 @@ button{font-family:inherit}
 .d-gold{background:#dbb97f;box-shadow:0 0 8px rgba(219,185,127,.7)}
 .d-green{background:#4ade80;box-shadow:0 0 8px rgba(74,222,128,.6)}
 
-.cv-main{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 540px;gap:30px;
-  padding:34px 44px 50px;align-items:start;max-width:1500px;margin:0 auto}
+.cv-main{position:relative;display:grid;grid-template-columns:minmax(290px,400px) minmax(0,1fr);gap:30px;
+  padding:34px 44px 50px;align-items:start;max-width:1720px;margin:0 auto}
+/* 2·3번 패널은 좌우로 — 글씨를 키워도 화면 하나에 들어오게 합니다. */
+.cv-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;align-items:start;margin-top:13px}
+.cv-pair .cv-panel+.cv-panel,.cv-pair .cv-panel{margin-top:0}
 .cv-since{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:5px;
   color:#7ea4ff;font-weight:700}
 .cv-since::after{content:"";width:70px;height:1px;
   background:linear-gradient(90deg,rgba(126,164,255,.6),transparent)}
-.cv-title{margin-top:18px;font-size:clamp(34px,3.8vw,50px);line-height:1.14;font-weight:800;
+.cv-title{margin-top:18px;font-size:clamp(30px,2.7vw,42px);line-height:1.18;font-weight:800;word-break:keep-all;
   letter-spacing:-1px;text-shadow:0 4px 24px rgba(0,0,0,.45)}
 .cv-title .accent{color:var(--gold)}
 .cv-en{margin-top:14px;font-size:12px;letter-spacing:6px;color:rgba(170,185,225,.6);font-weight:600}
@@ -78,48 +81,60 @@ button{font-family:inherit}
 .cv-motto .m b{font-weight:700;color:var(--gold);letter-spacing:6px}
 
 .cv-panel{background:linear-gradient(160deg,rgba(26,40,98,.55),rgba(10,16,42,.75));
-  border:1px solid rgba(160,180,235,.22);border-radius:20px;padding:20px 22px;
+  border:1px solid rgba(160,180,235,.28);border-radius:20px;padding:22px 24px;
   backdrop-filter:blur(6px);box-shadow:0 24px 60px rgba(4,8,26,.55)}
 .cv-panel+.cv-panel{margin-top:13px}
 .p-head{display:flex;align-items:center;gap:9px}
-.p-head h2{font-size:15px;font-weight:800;letter-spacing:.3px;margin:0}
-.p-num{width:24px;height:24px;border-radius:50%;background:rgba(219,185,127,.18);
-  border:1px solid rgba(219,185,127,.45);color:var(--gold2);font-size:12px;font-weight:800;
+.p-head h2{font-size:19px;font-weight:800;letter-spacing:-.2px;margin:0;color:#f0f4ff;white-space:nowrap}
+/* 1번 패널은 제목 옆에 안내를 한 줄로 붙입니다. */
+.cv-panel.one{padding:16px 24px}
+.p-head{flex-wrap:wrap}
+.p-line{font-size:14.5px;color:#bcc7e4;line-height:1.6;padding-left:4px}
+.p-num{width:29px;height:29px;border-radius:50%;background:rgba(219,185,127,.2);
+  border:1px solid rgba(219,185,127,.5);color:var(--gold2);font-size:15px;font-weight:800;
   display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-.p-tag{margin-left:auto;font-size:10px;font-weight:700;color:var(--gold2);
-  background:rgba(219,185,127,.13);border:1px solid rgba(219,185,127,.35);
-  border-radius:99px;padding:3px 9px}
+.p-tag{margin-left:auto;font-size:12.5px;font-weight:700;color:#f0d9a8;
+  background:rgba(219,185,127,.16);border:1px solid rgba(219,185,127,.45);
+  border-radius:99px;padding:4px 11px;white-space:nowrap}
+.p-tag.alt{color:#b9c6ec;background:rgba(160,180,235,.12);border-color:rgba(160,180,235,.32)}
 .p-tag.err{color:#ff9c9c;background:rgba(255,120,120,.12);border-color:rgba(255,140,140,.4)}
-.p-hint{font-size:12px;color:#93a0c4;margin-top:5px;line-height:1.7}
+.p-hint{font-size:14.5px;color:#bcc7e4;margin-top:8px;line-height:1.75}
 
-.howto{margin-top:12px;border:1px solid rgba(219,185,127,.32);background:rgba(219,185,127,.07);
-  border-radius:11px;padding:11px 13px}
-.howto .h{font-size:11.5px;font-weight:800;color:var(--gold2);letter-spacing:.4px;
-  margin-bottom:8px;display:flex;align-items:center;gap:6px}
+/* 받는 방법 — 접혀 있다가 눌러야 펴집니다. */
+.howto{margin-top:14px;border:1px solid rgba(219,185,127,.34);background:rgba(219,185,127,.08);
+  border-radius:11px;padding:11px 15px}
+.howto>summary{font-size:14px;font-weight:800;color:#f0d9a8;letter-spacing:-.1px;
+  display:flex;align-items:center;gap:7px;cursor:pointer;list-style:none;user-select:none}
+.howto>summary::-webkit-details-marker{display:none}
+.howto[open]>summary{margin-bottom:10px}
+.howto .arw2{margin-left:auto;font-size:12px;color:#d3b57e;transition:transform .15s}
+.howto[open] .arw2{transform:rotate(180deg)}
+.howto>summary:hover{color:#ffe9bd}
 .howto .tk2{width:3px;height:12px;border-radius:2px;background:var(--gold2);flex:0 0 auto}
-.howto .path{font-size:11.5px;line-height:2.1;color:#c0cbe4}
-.howto .s{background:rgba(8,12,32,.5);border:1px solid rgba(160,180,235,.22);border-radius:6px;
-  padding:3px 8px;white-space:nowrap;display:inline-block}
+.howto .path{font-size:13.5px;line-height:2.2;color:#d3dcf2}
+.howto .s{background:rgba(8,12,32,.55);border:1px solid rgba(160,180,235,.28);border-radius:6px;
+  padding:4px 10px;white-space:nowrap;display:inline-block}
 .howto .s.a{border-color:rgba(219,185,127,.45);color:var(--gold)}
 .howto .s.z{border-color:rgba(126,164,255,.55);color:#9dbcff;font-weight:700}
-.howto .arw{color:#77839e;padding:0 4px;font-size:10px}
+.howto .arw{color:#8b96b4;padding:0 5px;font-size:12px}
 
-.dropzone{margin-top:13px;border:1.5px dashed rgba(160,180,235,.38);border-radius:12px;
-  padding:22px 18px;text-align:center;background:rgba(9,14,36,.35);cursor:pointer;transition:.15s}
+.dropzone{margin-top:14px;border:1.5px dashed rgba(160,180,235,.45);border-radius:12px;
+  padding:26px 18px;text-align:center;background:rgba(9,14,36,.35);cursor:pointer;transition:.15s}
 .dropzone:hover,.dropzone.over{background:rgba(30,48,120,.42);border-color:rgba(160,180,235,.65)}
-.dropzone strong{display:block;font-size:14.5px;font-weight:700;color:#e5ebfa}
-.dz-hint{margin-top:6px;font-size:12px;color:#93a0c4}
+.dropzone strong{display:block;font-size:17px;font-weight:700;color:#eef2ff}
+.dz-hint{margin-top:8px;font-size:13.5px;color:#bcc7e4}
 .dz-tags{display:flex;gap:6px;justify-content:center;margin-top:11px;flex-wrap:wrap}
-.dz-tag{font-size:10.5px;font-weight:700;color:#b9c6ec;background:rgba(110,140,230,.14);
-  border:1px solid rgba(160,180,235,.22);border-radius:99px;padding:4px 10px}
-.opt{display:flex;gap:9px;align-items:flex-start;margin-top:13px;cursor:pointer;
-  background:rgba(219,185,127,.10);border:1px solid rgba(219,185,127,.3);border-radius:10px;padding:11px 13px}
-.opt input{margin:2px 0 0;width:15px;height:15px;flex:0 0 auto;accent-color:#c9a45f}
-.opt .t{font-size:12.5px;font-weight:700;color:#e5ebfa}
-.opt .d{font-size:11px;color:#93a0c4;margin-top:3px;line-height:1.65}
-.cv-safe{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:13px;
-  font-size:11.5px;color:#93a0c4}
-.cv-err{margin-top:11px;font-size:12.5px;color:#ff9c9c;background:rgba(255,120,120,.1);
+.dz-tag{font-size:12.5px;font-weight:700;color:#cdd8f6;background:rgba(110,140,230,.18);
+  border:1px solid rgba(160,180,235,.3);border-radius:99px;padding:5px 12px}
+.opt{display:flex;gap:11px;align-items:flex-start;margin-top:14px;cursor:pointer;
+  background:rgba(219,185,127,.10);border:1px solid rgba(219,185,127,.3);border-radius:10px;padding:14px 16px}
+.opt input{margin:3px 0 0;width:18px;height:18px;flex:0 0 auto;accent-color:#c9a45f}
+.opt .t{font-size:15px;font-weight:500;color:#dde4f8;line-height:1.65}
+.opt .t b{color:#ffd98f;font-weight:800}
+.opt .d{font-size:13px;color:#bcc7e4;margin-top:4px;line-height:1.7}
+.cv-safe{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:14px;
+  font-size:13px;color:#bcc7e4}
+.cv-err{margin-top:11px;font-size:14px;color:#ffb0b0;background:rgba(255,120,120,.1);
   border:1px solid rgba(255,140,140,.35);border-radius:9px;padding:9px 12px;line-height:1.7}
 
 .centerwrap{position:relative;display:flex;flex-direction:column;align-items:center;
@@ -322,7 +337,8 @@ td.ok b{color:var(--pass)} td.warn{color:var(--minx)} td.nw{white-space:nowrap}
 .empty{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
   padding:60px 20px;text-align:center;color:var(--sub);font-size:13px;line-height:1.9}
 
-@media(max-width:1220px){.cv-main{grid-template-columns:minmax(0,1fr) 460px;gap:24px}}
+@media(max-width:1150px){.cv-pair{grid-template-columns:1fr}}
+@media(max-width:1220px){.cv-main{grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:24px}}
 @media(max-width:1080px){
   .cv-main{grid-template-columns:1fr}
   #app{flex-direction:column}
