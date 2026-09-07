@@ -75,8 +75,15 @@
         <div class="gpa-in">
           <label>내신 전교과 <span class="req">*</span> <span id="gpanote" class="gpanote"></span></label>
           <div class="gpa-row">
-            <input type="number" id="gpa" step="0.01" min="1" max="9" placeholder="3.45">
-            <div class="gpa-subs" id="gpasubs"></div>
+            <div class="gcard">
+              <div class="cbt">전교과</div>
+              <div class="cbv">
+                <div id="gpa5c" class="hidden"><span>5등급</span><b id="gpa5">—</b></div>
+                <div><span>9등급</span>
+                  <input type="number" id="gpa" step="0.01" min="1" max="9" placeholder="3.45"></div>
+              </div>
+            </div>
+            <div class="gcard" id="gpasubs"></div>
           </div>
         </div>
         <label class="lbl">수능 / 모의고사 등급 <span class="wn">(선택)</span></label>

@@ -236,14 +236,19 @@ export function parseHistory(workbook, XLSX) {
    9등급 칸만 사용합니다. 열 위치는 헤더에서 찾고, 못 찾으면 고정 위치로 넘어갑니다. */
 const ROSTER_FALLBACK = { g1: 5, g2: 7, g3: 9, all: 11, ko: 13, ma: 15, en: 17, so: 19, sc: 21 };
 
+/* 성적표 맨 뒤의 묶음 교과 — 김영일 컨설팅에서 받을 때 고른 조합만 채워져 옵니다.
+   비어 있는 파일도 많아, 있으면 쓰고 없으면 교과별 등급을 그대로 보여 줍니다. */
+const ROSTER_COMBO = ['국수영사과', '국수영사', '국수영과', '국수영', '수과'];
+
 function findRosterCols(rows) {
   const width = Math.max(...rows.slice(0, 5).map(r => (r ? r.length : 0)));
   const g3 = forwardFill(rows[2], width);
   const g4 = forwardFill(rows[3], width);
   const r5 = rows[4] || [];
-  const pick = (group, sub) => {
+  /* 성적표는 과목마다 5등급·9등급 두 칸입니다. 어느 쪽 칸인지 지정해 찾습니다. */
+  const pick = (group, sub, scale = '9등급') => {
     for (let i = 0; i < width; i++) {
-      if (clean(r5[i]) !== '9등급') continue;
+      if (clean(r5[i]) !== scale) continue;
       if (sub ? g4[i] === sub : true) {
         if (g3[i] === group) return i;
       }
@@ -255,10 +260,16 @@ function findRosterCols(rows) {
     g2: pick('기준교과(전교과)', '2학년'),
     g3: pick('기준교과(전교과)', '3학년'),
     all: pick('전교과', null),
+    all5: pick('전교과', null, '5등급'),
     ko: pick('국', null), ma: pick('수', null),
     en: pick('영', null), so: pick('사', null), sc: pick('과', null),
   };
-  for (const k of Object.keys(c)) if (c[k] < 0) c[k] = ROSTER_FALLBACK[k];
+  for (const k of Object.keys(c)) if (c[k] < 0 && ROSTER_FALLBACK[k] != null) c[k] = ROSTER_FALLBACK[k];
+  c.combo = {};
+  for (const n of ROSTER_COMBO) {
+    const i9 = pick(n, null, '9등급'), i5 = pick(n, null, '5등급');
+    if (i9 >= 0 || i5 >= 0) c.combo[n] = { g9: i9, g5: i5 };
+  }
   return c;
 }
 
@@ -277,11 +288,18 @@ export function parseRoster(workbook, XLSX) {
     out.push({
       r: num(row[0]), c: num(row[1]), no: num(row[2]), nm,
       g: [num(row[c.g1]), num(row[c.g2]), num(row[c.g3]), all],
+      a5: c.all5 >= 0 ? num(row[c.all5]) : null,
       s: [num(row[c.ko]), num(row[c.ma]), num(row[c.en]), num(row[c.so]), num(row[c.sc])],
+      cb: Object.fromEntries(Object.entries(c.combo).map(([n, ix]) => [n, {
+        g5: ix.g5 >= 0 ? num(row[ix.g5]) : null,
+        g9: ix.g9 >= 0 ? num(row[ix.g9]) : null,
+      }]).filter(([, v]) => v.g5 != null || v.g9 != null)),
     });
   }
   out.sort((a, b) => (a.c - b.c) || (a.no - b.no));
-  return { students: out, meta: { n: out.length, loadedAt: Date.now() } };
+  /* 묶음 교과는 전원이 비어 있는 경우가 흔합니다. 실제로 값이 있는 것만 남깁니다. */
+  const combos = ROSTER_COMBO.filter(n => out.some(s2 => s2.cb[n]));
+  return { students: out, meta: { n: out.length, combos, loadedAt: Date.now() } };
 }
 
 /* ── 학년별 반영 비중 역산 ───────────────────────────── */

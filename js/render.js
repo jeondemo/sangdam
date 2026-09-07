@@ -58,13 +58,23 @@ const SUBN = ['국', '영', '수', '사', '과'];
 /* 성적표 열 순서는 국·수·영·사·과입니다. 화면에는 국·영·수 순으로 보여 줍니다. */
 const SUBI = [0, 2, 1, 3, 4];
 
-/* 내신 입력칸 옆에 붙는 교과별 등급 */
-export function gpaSubs(st) {
-  if (!st?.s) return '';
-  return SUBI.map((j, i) => {
-    const v = st.s[j];
-    return `<div><span>${SUBN[i]}</span><b>${v != null ? v.toFixed(2) : '—'}</b></div>`;
-  }).join('');
+/* 내신 입력칸 옆 카드.
+   성적표 맨 뒤의 묶음 교과(국수영사과 등)가 채워져 있으면 그것을 보여 주고,
+   비어 있으면 교과별 등급을 늘어놓습니다.
+   5등급과 9등급이 둘 다 있으면 5등급을 앞에 씁니다 — 1·2학년은 5등급이 기준입니다. */
+export function gpaSubs(st, meta) {
+  if (!st) return '';
+  const cell = (lab, x) => (x == null ? ''
+    : `<div><span>${esc(lab)}</span><b>${x.toFixed(2)}</b></div>`);
+  const name = (meta?.combos || []).find(n => st.cb?.[n]);
+  if (name) {
+    const v = st.cb[name];
+    return `<div class="cbt">${esc(name)}</div>
+      <div class="cbv">${cell('5등급', v.g5)}${cell('9등급', v.g9)}</div>`;
+  }
+  if (!st.s) return '';
+  return `<div class="cbt">교과별 <span class="wn">9등급</span></div>
+    <div class="cbv many">${SUBI.map((j, i) => cell(SUBN[i], st.s[j])).join('')}</div>`;
 }
 
 export function studentCard(st, total) {

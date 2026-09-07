@@ -246,6 +246,7 @@ function setMode(mode) {
   S.mode = mode;
   S.cur = null;
   if ($('gpasubs')) $('gpasubs').innerHTML = '';
+  $('gpa5c')?.classList.add('hidden');
   document.querySelectorAll('#modechips .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.mode === mode)));
 
   /* 과목 선택은 성적이 아니라 편제를 다루므로 사이드바 구성이 다릅니다. */
@@ -310,6 +311,7 @@ function onStudentChange() {
   if (!v) {
     S.cur = null; $('stucard').classList.add('hidden');
     $('gpanote').textContent = ''; $('gpasubs').innerHTML = '';
+    $('gpa5c').classList.add('hidden');
     return;
   }
   const [c, no] = v.split('-').map(Number);
@@ -325,7 +327,10 @@ function onStudentChange() {
     $('stucard').innerHTML = R.studentCard(S.cur, S.roster.meta.n);
     $('gpa').value = S.cur.g[3].toFixed(2);
     $('gpanote').textContent = '';
-    $('gpasubs').innerHTML = R.gpaSubs(S.cur);
+    $('gpasubs').innerHTML = R.gpaSubs(S.cur, S.roster?.meta);
+    /* 전교과 5등급은 1·2학년 성적표에만 들어 있습니다. */
+    $('gpa5').textContent = S.cur.a5 != null ? S.cur.a5.toFixed(2) : '—';
+    $('gpa5c').classList.toggle('hidden', S.cur.a5 == null);
   }
   $('stucard').classList.remove('hidden');
   run();
