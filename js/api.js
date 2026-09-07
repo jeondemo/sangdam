@@ -46,17 +46,24 @@ export async function fetchData(key, onProgress) {
 /* 관리자 — 새 자료 올리기. 40,000자씩 잘라 보냅니다. */
 const CHUNK = 40000;
 
-export async function uploadData(adminKey, encoded, onProgress) {
+export async function uploadData(adminKey, encoded, onProgress, kind = 'data') {
   const text = JSON.stringify(encoded);
   const parts = [];
   for (let i = 0; i < text.length; i += CHUNK) parts.push(text.slice(i, i + CHUNK));
 
-  await post({ action: 'begin', admin: adminKey, total: parts.length });
+  await post({ action: 'begin', admin: adminKey, total: parts.length, kind });
   for (let i = 0; i < parts.length; i++) {
-    await post({ action: 'chunk', admin: adminKey, seq: i, data: parts[i] });
+    await post({ action: 'chunk', admin: adminKey, seq: i, data: parts[i], kind });
     onProgress?.(i + 1, parts.length);
   }
-  return post({ action: 'commit', admin: adminKey, meta: encoded.meta });
+  return post({ action: 'commit', admin: adminKey, meta: encoded.meta, kind });
+}
+
+/* 정시 배치기준표 내려받기 (없으면 ok:false — 정상입니다) */
+export async function fetchCut(key) {
+  const res = await fetch(url({ k: key, mode: 'cut' }));
+  if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
+  return res.json();
 }
 
 /* 관리자 — 현재 상태 확인 */

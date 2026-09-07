@@ -357,3 +357,83 @@ export function pctAvg(p) {
   const v = [p.k, p.m, p.s1, p.s2].filter(x => x != null);
   return v.length >= 3 ? v.reduce((s, x) => s + x, 0) / v.length : null;
 }
+
+
+/* ── 파일 이름·학급에서 학년과 시험 이름을 알아냅니다 ─────
+   예) "2026년 6월 교육청 영역별 기준 수능성적표 2027학년도 과천여자고등학교 2학년.xls"
+       → { grade: 2, label: '2학년 6월 교육청' }
+   학년은 학급 번호(301 → 3학년)를 우선으로 하고, 없으면 파일 이름에서 찾습니다. */
+export function examInfo(filename, students) {
+  const name = String(filename || '');
+  let grade = null;
+  const counts = {};
+  for (const s of students || []) {
+    const c = Number(s.c);
+    if (c >= 100 && c < 1000) { const g = Math.floor(c / 100); counts[g] = (counts[g] || 0) + 1; }
+  }
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  if (top) grade = Number(top[0]);
+  if (grade == null) { const m = name.match(/([1-3])\s*학년/); if (m) grade = Number(m[1]); }
+
+  const month = (name.match(/(\d{1,2})\s*월/) || [])[1] || null;
+  const org = /평가원/.test(name) ? '평가원' : /교육청/.test(name) ? '교육청' : /수능/.test(name) && !/모의/.test(name) && !month ? '수능' : null;
+  const year = (name.match(/(20\d{2})\s*학년도/) || [])[1] || null;
+
+  const parts = [];
+  if (grade) parts.push(`${grade}학년`);
+  if (month) parts.push(`${month}월`);
+  if (org) parts.push(org);
+  return { grade, month, org, year, label: parts.join(' ') || null };
+}
+
+
+/* ── 정시 배치기준표 (관리자가 올리는 대학별 입시결과 엑셀) ─────
+   열 이름으로 찾습니다. 순서는 상관없고, 없는 열은 비워 둡니다.
+   필수: 대학, 모집단위. 지표: 백분위70 / 백분위50 / 등급평균 중 하나 이상. */
+const CUT_COLS = {
+  univ: ['대학', '대학명'], campus: ['캠퍼스'], year: ['학년도', '연도'], group: ['군', '모집군'],
+  track: ['전형', '전형명'], dept: ['모집단위', '학과', '학과명'], quota: ['모집인원', '모집'],
+  ratio: ['경쟁률'], wait: ['충원', '충원순위', '예비순위', '충원인원'],
+  conv50: ['환산50', '환산점수50', '환산50%컷'], conv70: ['환산70', '환산점수70', '환산70%컷'], convMax: ['환산만점', '만점'],
+  pct50: ['백분위50', '백분위 50%', '백분위평균', '평균백분위'], pct70: ['백분위70', '백분위 70%', '70%컷'],
+  pctKo: ['국어'], pctMa: ['수학'], pctInq: ['탐구'], gradeAvg: ['등급평균', '등급'],
+  metric: ['지표'], note: ['비고', '메모'], src: ['출처'],
+};
+
+export function parseCutTable(workbook, XLSX) {
+  const rows = [];
+  for (const name of workbook.SheetNames) {
+    const ws = workbook.Sheets[name];
+    const arr = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+    let hi = -1, col = null;
+    for (let i = 0; i < Math.min(arr.length, 10); i++) {
+      const hdr = arr[i].map(v => (clean(v) || '').replace(/\s+/g, ''));
+      const found = {};
+      for (const [k, names] of Object.entries(CUT_COLS)) {
+        const j = hdr.findIndex(h => names.some(n => h === n.replace(/\s+/g, '') || (n.length > 2 && h.startsWith(n))));
+        if (j >= 0) found[k] = j;
+      }
+      if (found.univ != null && found.dept != null) { hi = i; col = found; break; }
+    }
+    if (hi < 0) continue;
+    for (let i = hi + 1; i < arr.length; i++) {
+      const r = arr[i];
+      const g = k => (col[k] == null ? null : r[col[k]]);
+      const univ = clean(g('univ')), dept = clean(g('dept'));
+      if (!univ || !dept) continue;
+      const row = {
+        univ, dept, campus: clean(g('campus')) || '', year: num(g('year')), group: (clean(g('group')) || '').replace('군', ''),
+        track: clean(g('track')) || '', quota: num(g('quota')), ratio: num(g('ratio')), wait: clean(g('wait')),
+        conv50: num(g('conv50')), conv70: num(g('conv70')), convMax: num(g('convMax')),
+        pct50: num(g('pct50')), pct70: num(g('pct70')), pctKo: num(g('pctKo')), pctMa: num(g('pctMa')), pctInq: num(g('pctInq')),
+        gradeAvg: num(g('gradeAvg')), metric: clean(g('metric')) || '', note: clean(g('note')) || '', src: clean(g('src')) || '',
+      };
+      if (!row.metric) row.metric = row.pct70 != null ? 'pct70' : row.pct50 != null ? 'pctAvg' : row.gradeAvg != null ? 'grade' : row.conv70 != null ? 'conv' : 'none';
+      row.gy = gyeyeol(dept);
+      rows.push(row);
+    }
+  }
+  const univs = [...new Set(rows.map(r => r.univ))];
+  const years = [...new Set(rows.map(r => r.year).filter(Boolean))].sort();
+  return { rows, meta: { n: rows.length, nUniv: univs.length, univs, years, loadedAt: Date.now() } };
+}

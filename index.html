@@ -40,8 +40,8 @@
 
       <div class="sbl">상담 유형</div>
       <div class="chips mode" id="modechips">
-        <button class="chip" data-mode="susi" aria-pressed="true">수시·정시 <small>3학년</small></button>
-        <button class="chip" data-mode="jg" aria-pressed="false">정시만 <small>2학년 모의</small></button>
+        <button class="chip" data-mode="susi" aria-pressed="true">수시·정시<small id="m-susi">명단 없음</small></button>
+        <button class="chip" data-mode="jg" aria-pressed="false">정시만<small id="m-jg">명단 없음</small></button>
       </div>
 
       <div class="sbl">학생 선택</div>
@@ -116,7 +116,7 @@
         <button class="tab" role="tab" data-t="stu" aria-selected="true"><span id="t-stu">유사 학생</span><span class="c" id="c-stu"></span></button>
         <button class="tab" role="tab" data-t="univ" aria-selected="false"><span id="t-univ">대학·전형</span><span class="c" id="c-univ"></span></button>
         <button class="tab" role="tab" data-t="track" aria-selected="false"><span id="t-track">카드 배분</span></button>
-        <button class="tab" role="tab" data-t="jg" aria-selected="false">정시<span class="c" id="c-jg"></span></button>
+        <button class="tab" role="tab" data-t="jg" aria-selected="false"><span id="t-jg">정시</span><span class="c" id="c-jg"></span></button>
       </div>
       <div id="p-stu"></div>
       <div id="p-univ" class="hidden"></div>
@@ -133,6 +133,7 @@
 <input type="file" id="f-roster" accept=".xlsx,.xls" hidden>
 <input type="file" id="f-history" accept=".xlsx,.xls" hidden>
 <input type="file" id="f-mock" accept=".xls,.xlsx,.html,.htm" multiple hidden>
+<input type="file" id="f-cut" accept=".xlsx,.xls,.csv" hidden>
 
 <script src="./vendor/xlsx.full.min.js"></script>
 <script type="module" src="./js/main.js"></script>

@@ -228,3 +228,117 @@ export function aggregateGroup(jg) {
   }
   return [...m.values()].filter(o => o.n);
 }
+
+/* ── 정시 배치 — 학생 백분위 vs 대학 공개 입시결과 ─────────
+   기준: 학생의 국·수·탐 백분위 평균(탐구는 2과목 평균)을 대학이 공개한
+   최종등록자 70%컷(또는 평균) 백분위와 비교합니다.
+   대학마다 탐구 반영 과목 수·영어 처리 방식이 달라 근사치입니다. */
+
+export const JUDGE = [
+  ['안정', 'safe'], ['적정', 'fit'], ['소신', 'reach'], ['상향', 'up'], ['도전', 'dream'],
+];
+const AVG_OFFSET = 0.7;   // '평균'은 70%컷보다 대략 이만큼 높습니다
+
+/* 백분위 → 대략적인 등급 (등급만 공개한 대학과 비교할 때만 씁니다) */
+export function pctToGrade(p) {
+  if (p == null) return null;
+  const cuts = [96, 89, 77, 60, 40, 23, 11, 4];
+  for (let i = 0; i < cuts.length; i++) if (p >= cuts[i]) return i + 1;
+  return 9;
+}
+
+export function studentPct3(pct) {
+  const inq = [pct.s1, pct.s2].filter(x => x != null);
+  const parts = [pct.k, pct.m].filter(x => x != null);
+  if (inq.length) parts.push(inq.reduce((a, b) => a + b, 0) / inq.length);
+  return parts.length >= 2 ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
+}
+
+function judgeByDiff(d, t) {
+  if (d >= t[0]) return 0;
+  if (d >= t[1]) return 1;
+  if (d >= t[2]) return 2;
+  if (d >= t[3]) return 3;
+  return 4;
+}
+
+/* 우리 학교 5개년 정시 지원 결과를 대학·학과별로 세어 둡니다. */
+export function schoolJeongsiStats(index) {
+  const byUniv = new Map(), byDept = new Map();
+  const add = (m, k, pass) => { const o = m.get(k) || { n: 0, h: 0 }; o.n++; if (pass) o.h++; m.set(k, o); };
+  for (const a of index.apps) {
+    if (a.ph !== 1 || a.res == null) continue;
+    const pass = a.res === '합격' || a.res === '추합';
+    add(byUniv, a.univ, pass);
+    add(byDept, `${a.univ}|${a.dept || ''}`, pass);
+  }
+  return { byUniv, byDept };
+}
+
+const normDept = s => String(s || '').replace(/[\s()·ㆍ・,\-]/g, '').replace(/학과$|학부$|전공$|과$/, '');
+
+export function placement(cut, opts) {
+  const { pct, eng, myGrade, gy, similarRows, school, yearOnly } = opts;
+  const my = studentPct3(pct);
+  if (my == null || !cut?.rows?.length) return { my, list: [] };
+  const myG = myGrade ?? (() => {
+    const gs = [pct.k, pct.m, pct.s1, pct.s2].map(pctToGrade).filter(x => x != null);
+    return gs.length ? gs.reduce((a, b) => a + b, 0) / gs.length : null;
+  })();
+  /* 유사 졸업생의 대학별 결과 */
+  const sim = new Map();
+  for (const r of similarRows || []) {
+    const k = r.a.univ; const o = sim.get(k) || { n: 0, h: 0 }; o.n++; if (isPass(r)) o.h++; sim.set(k, o);
+  }
+  /* 같은 학과가 여러 학년도로 들어 있으면 가장 최근 것만 씁니다. */
+  const newest = new Map();
+  for (const r of cut.rows) {
+    const k = `${r.univ}|${r.campus || ''}|${r.dept}|${r.group || ''}|${r.track || ''}`;
+    const p = newest.get(k);
+    if (!p || (r.year || 0) > (p.year || 0)) newest.set(k, r);
+  }
+  const list = [];
+  for (const r of newest.values()) {
+    if (yearOnly && r.year !== yearOnly) continue;
+    if (gy >= 0 && r.gy !== gy) continue;
+    let base = null, kind = '', diff = null, j = null;
+    if (r.metric === 'grade' && r.gradeAvg != null) {
+      if (myG == null) continue;
+      base = r.gradeAvg; kind = '등급';
+      diff = base - myG;      // 양수면 학생이 더 좋음
+      j = judgeByDiff(diff, [0.4, 0.1, -0.2, -0.5]);
+    } else if (r.metric === 'school' && r.pct70 != null) {
+      base = r.pct70; kind = '우리 학교';
+      diff = my - (r.pct70 - AVG_OFFSET);
+      j = judgeByDiff(diff, [2.0, 0, -1.5, -3.0]);
+    } else {
+      const c70 = r.pct70 != null ? r.pct70 : (r.pct50 != null ? r.pct50 - AVG_OFFSET : null);
+      if (c70 == null) continue;
+      base = r.pct70 != null ? r.pct70 : r.pct50;
+      kind = r.pct70 != null ? (r.metric === 'pctAvg' ? '평균' : '70%컷') : '평균';
+      diff = my - c70;
+      j = judgeByDiff(diff, [2.0, 0, -1.5, -3.0]);
+    }
+    if (kind === '등급' ? (diff < -1.2 || diff > 2.5) : (diff < -6 || diff > 10)) continue;   // 화면이 넘치지 않게 멀리 있는 학과는 뺍니다
+    const dk = `${r.univ}|${r.dept}`;
+    let dept = school?.byDept.get(dk);
+    if (!dept) {
+      const nd = normDept(r.dept);
+      for (const [k, v] of school?.byDept || []) {
+        if (k.startsWith(r.univ + '|') && nd && normDept(k.split('|')[1]) === nd) { dept = v; break; }
+      }
+    }
+    list.push({
+      ...r, base, kind, diff, j, jn: JUDGE[j][0], jc: JUDGE[j][1],
+      univStat: school?.byUniv.get(r.univ) || null, deptStat: dept || null, sim: sim.get(r.univ) || null,
+    });
+  }
+  /* 배치표처럼 기준이 높은 학과부터 아래로 내려갑니다. 등급만 있는 대학은 맨 뒤에. */
+  const years = [...new Set(list.map(x => x.year).filter(Boolean))].sort();
+  list.sort((a, b) => {
+    const ga = a.kind === '등급', gb = b.kind === '등급';
+    if (ga !== gb) return ga ? 1 : -1;
+    return ga ? (a.base - b.base) : (b.base - a.base) || a.univ.localeCompare(b.univ);
+  });
+  return { my, myG, list, years };
+}

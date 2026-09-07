@@ -345,3 +345,33 @@ td.ok b{color:var(--ok)} td.warn{color:var(--danger)} td.nw{white-space:nowrap}
 .dl{display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;border-radius:6px;background:#eef1f5;color:#4b5a6b;white-space:nowrap}
 .dl.ok{background:var(--ok-soft);color:#12703a}
 .dl i{font-style:normal;font-size:10.5px;opacity:.75;margin-left:2px}
+
+/* ── 정시 배치 탭 ── */
+.pl-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+.pl-tools .chips .chip{background:#f3f5fa;border-color:#dfe4ee;color:#4b5a70;padding:5px 10px;font-size:12px}
+.pl-tools .chips .chip small{font-weight:700;opacity:.7;margin-left:2px}
+.pl-tools .chips .chip[aria-pressed=true]{background:#1e2e68;border-color:#1e2e68;color:#fff}
+.pl-tools .chips .chip[disabled]{opacity:.35;cursor:default}
+.pl-tools input{margin-left:auto;width:200px;border:1px solid #dfe4ee;border-radius:8px;padding:6px 10px;font-size:12.5px;background:#fff}
+.pltbl td{vertical-align:middle}
+.pltbl .dp2{min-width:170px}
+.pltbl .info{display:inline-block;margin-left:4px;color:#8896aa;cursor:help;font-size:11px}
+.pltbl td.no{color:#b42318;font-weight:700}
+.pltbl td.ok{color:#12703a;font-weight:700}
+.jt{font-size:10.5px;padding:3px 8px;border-radius:6px}
+.jt-safe{background:#e2f6ea;color:#0f6b36}
+.jt-fit{background:#e3edff;color:#1d4fd7}
+.jt-reach{background:#fff1d6;color:#9a5b00}
+.jt-up{background:#fde4e1;color:#b42318}
+.jt-dream{background:#eceff4;color:#6b7686}
+.pl-tools .chip.j-safe[aria-pressed=true]{background:#0f6b36;border-color:#0f6b36}
+.pl-tools .chip.j-fit[aria-pressed=true]{background:#1d4fd7;border-color:#1d4fd7}
+.pl-tools .chip.j-reach[aria-pressed=true]{background:#9a5b00;border-color:#9a5b00}
+.pl-tools .chip.j-up[aria-pressed=true]{background:#b42318;border-color:#b42318}
+.sch .ss{display:inline-block;font-size:11px;color:#4b5a70;background:#f3f5fa;border-radius:6px;padding:2px 7px;margin:1px 4px 1px 0;white-space:nowrap}
+.sch .ss i{font-style:normal;color:#8896aa;margin-right:2px}
+.sch .ss b.ok{color:#12703a} .sch .ss b.mut{color:#8896aa}
+tr.pl.hidden{display:none}
+.note.fine{font-size:11.5px;color:#6b7686;border-left-color:#c9d2e3;background:#f8fafd}
+.pltbl .sch-k{color:#7c5cff;font-weight:700}
+.note .sch-k{color:#6b46e5;font-weight:700}

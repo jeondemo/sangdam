@@ -1,6 +1,6 @@
 /* 화면 렌더링 — HTML 문자열을 만들어 돌려줍니다. */
 
-import { isPass } from './match.js';
+import { isPass, JUDGE } from './match.js';
 
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const pct1 = (a, b) => (b ? ((a / b) * 100).toFixed(1) : '0.0');
@@ -208,7 +208,7 @@ const stdSum = c => {
   return v.length === 4 ? v.reduce((s, x) => s + x, 0) : null;
 };
 
-/* 사이드바 — 2학년 모의고사 학생 카드 */
+/* 사이드바 — 모의고사 학생 카드 */
 export function mockCard(st, total) {
   const g = st.grade, p = st.pct, s = st.std;
   const f = x => (x == null ? '—' : x);
@@ -235,7 +235,7 @@ export function jeongsiStatBar(sel, sum) {
   <div class="stat"><b class="brand">${pct(sum.stuPass.size, sum.stu.size)}%</b><i>1개 이상 합격 (${sum.stuPass.size}/${sum.stu.size}명)</i></div>`;
 }
 
-export function jeongsiHeadline(sum, sel, pctIn, eng, name, groups) {
+export function jeongsiHeadline(sum, sel, pctIn, eng, name, groups, exam) {
   const f = x => (x == null ? '·' : Math.round(x));
   const best = groups.length ? [...groups].sort((a, b) => (b.h / b.n) - (a.h / a.n))[0] : null;
   let s = (name ? `<span class="who-tag">${esc(name)}</span>` : '')
@@ -244,10 +244,13 @@ export function jeongsiHeadline(sum, sel, pctIn, eng, name, groups) {
     + ` 근처 졸업생 ${sel.length}명 기준입니다. 정시 ${sum.jg.length}장 중 ${sum.nPass}장이 합격으로 이어졌고, `
     + `<b>${sum.stuPass.size}명(${pct(sum.stuPass.size, sum.stu.size)}%)</b>이 최소 한 곳에 붙었습니다.`;
   if (best && best.n >= 5) s += ` 이 성적대에서는 <b>${esc(best.grp)}</b> 합격률이 가장 높았습니다(${pct(best.h, best.n)}%).`;
-  return `<div class="note">${s}</div>
-  <div class="note warn"><b>2학년 6월 모의고사 성적이 수능까지 유지된다는 가정</b>입니다.
-    교육청 모의고사는 재수생이 빠져 있고 범위도 좁아 실제 수능보다 백분위가 높게 나오는 경향이 있습니다.
-    목표 설정용으로 보시고 보수적으로 읽어 주세요.</div>`;
+  const label = exam?.label || '모의고사';
+  const isReal = exam?.org === '수능';
+  const warn = isReal
+    ? ''
+    : `<div class="note warn"><b>${esc(label)} 성적이 수능까지 유지된다는 가정</b>입니다.
+    ${exam?.org === '교육청' ? '교육청 모의고사는 재수생이 빠져 있고 범위도 좁아 실제 수능보다 백분위가 높게 나오는 경향이 있습니다. ' : ''}목표 설정용으로 보시고 보수적으로 읽어 주세요.</div>`;
+  return `<div class="note">${s}</div>${warn}`;
 }
 
 export function jeongsiStudents(sel, rows) {
@@ -310,4 +313,50 @@ export function groupTable(list, sum) {
     <td class="n ${o.h ? 'ok' : 'mut'}" data-v="${o.h}"><b>${o.h}</b></td>
     <td class="n" data-v="${o.n ? o.h / o.n : 0}">${pct(o.h, o.n)}%</td>
   </tr>`).join('')}</tbody></table></div>`;
+}
+
+/* ── 정시 배치 탭 ────────────────────────────────────── */
+
+const fmt1 = x => (x == null ? '—' : (Math.round(x * 10) / 10).toFixed(1));
+const sign = x => (x > 0 ? '+' : '') + fmt1(x);
+
+const stat = (o, label) => o ? `<span class="ss"><i>${esc(label)}</i> ${o.n}건 · <b class="${o.h ? 'ok' : 'mut'}">합 ${o.h}</b></span>` : '';
+
+export function placementTable(res, opts) {
+  const { exam, cutMeta, gyLabel } = opts || {};
+  if (!res || res.my == null) return '<div class="empty">국·수·탐 백분위를 입력하면 배치 결과가 나옵니다.</div>';
+  if (!res.list.length) return `<div class="empty">배치기준표에 이 성적대(백분위 평균 ${fmt1(res.my)})와 비교할 학과가 없습니다.<br>
+    <span class="fine">관리자가 배치기준표에 대학을 더 넣으면 늘어납니다.</span></div>`;
+  const cnt = JUDGE.map(([n, c]) => [n, c, res.list.filter(x => x.jc === c).length]);
+  const def = (cnt.find(x => x[1] === 'fit' && x[2] > 0) ? 'fit' : 'all');
+  const label = exam?.label || '모의고사';
+  const yr = (res.years || []).join('·');
+  const head = `<div class="note"><b>${esc(label)}</b> 백분위 평균 <b>${fmt1(res.my)}</b> (국·수·탐 3영역) 기준으로,
+    대학과 대교협이 공개한 <b>${esc(yr)}학년도 최종등록자 컷</b>과 비교했습니다.
+    <span class="fine">대학마다 탐구 반영 과목 수·영어 처리·표본이 달라 <b>±2 정도는 오차</b>로 보셔야 합니다.
+    배치기준표에 실린 <b>${cutMeta?.nUniv || 0}개 대학 · ${cutMeta?.n || 0}개 모집단위</b>만 나옵니다.
+    기준이 <span class="sch-k">우리 학교</span>로 적힌 줄은 대학이 공개한 학과별 컷이 아니라
+    <b>우리 학교 졸업생이 실제로 합격한 백분위의 중앙값</b>이라 학과 구분이 없습니다.</span></div>
+  <div class="pl-tools">
+    <div class="chips" id="plchips"><button class="chip" data-j="all" aria-pressed="${def === 'all'}">전체 <small>${res.list.length}</small></button>
+      ${cnt.map(([n, c, k]) => `<button class="chip j-${c}" data-j="${c}" aria-pressed="${def === c}" ${k ? '' : 'disabled'}>${n} <small>${k}</small></button>`).join('')}</div>
+    <input type="search" id="plq" placeholder="대학·학과 찾기">
+  </div>`;
+  const rows = res.list.map(x => `<tr class="pl j-${x.jc}${(def === 'all' || def === x.jc) ? '' : ' hidden'}" data-j="${x.jc}" data-q="${esc((x.univ + ' ' + x.dept).toLowerCase())}">
+    <td><span class="tag jt jt-${x.jc}">${x.jn}</span></td>
+    <td class="nw"><b>${esc(x.univ)}</b>${x.campus ? `<span class="mut"> ${esc(x.campus)}</span>` : ''}</td>
+    <td class="mut nw">${x.group ? esc(x.group) + '군' : ''}</td>
+    <td class="dp2">${esc(x.dept)}${x.track && !/일반|^수능/.test(x.track) ? `<span class="mut"> · ${esc(x.track)}</span>` : ''}
+      ${x.note ? `<span class="info" title="${esc(x.note)}">ⓘ</span>` : ''}</td>
+    <td class="n nw" data-v="${x.base}">${fmt1(x.base)}<span class="mut${x.kind === '우리 학교' ? ' sch-k' : ''}"> ${esc(x.kind)}</span></td>
+    <td class="n nw ${x.diff >= 0 ? 'ok' : 'no'}" data-v="${x.diff}">${x.kind === '등급' ? sign(x.diff) + '등급' : sign(x.diff)}</td>
+    <td class="n mut nw">${x.quota ?? ''}${x.wait ? `<span class="mut"> · 충원 ${esc(x.wait)}</span>` : ''}</td>
+    <td class="sch">${stat(x.sim, '유사')}${stat(x.deptStat, '학과')}${!x.deptStat ? stat(x.univStat, '대학') : ''}${(!x.sim && !x.deptStat && !x.univStat) ? '<span class="mut">사례 없음</span>' : ''}</td>
+  </tr>`).join('');
+  return `${head}<div class="tbl-wrap"><table data-sortable class="pltbl">
+  <thead><tr><th>판정</th><th>대학</th><th>군</th><th>모집단위</th><th class="n">대학 기준</th><th class="n">차이</th><th class="n">모집·충원</th><th>우리 학교 정시 사례</th></tr></thead>
+  <tbody>${rows}</tbody></table></div>
+  <div class="note fine">처음에는 <b>적정</b>만 보여 드립니다. 위 칩으로 안정·소신·상향도 볼 수 있습니다.
+    판정 기준: 안정 +2 이상 · 적정 0 이상 · 소신 −1.5 이상 · 상향 −3 이상 · 도전 그 아래. 「평균」으로만 공개한 대학은 70%컷보다 0.7 높다고 보고 보정했습니다.
+    「유사」는 이 화면의 유사 졸업생, 「학과」·「대학」은 우리 학교 5개년 정시 지원 전체입니다.</div>`;
 }

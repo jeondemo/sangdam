@@ -36,7 +36,8 @@ export const del = key => tx('readwrite', s => s.delete(key)).catch(() => null);
 export const KEY_DATA = 'history';     // 5개년 자료 캐시 (익명 — 이름 없음)
 export const KEY_ROSTER = 'roster';    // 학생 명단 (실명 — 교사가 저장을 선택했을 때만)
 export const KEY_LINK = 'linkkey';     // 접속 링크의 열쇠
-export const KEY_MOCK = 'mock';        // 2학년 모의고사 명단 (실명 — 저장을 선택했을 때만)
+export const KEY_MOCK = 'mock';        // 모의고사 명단 (실명 — 저장을 선택했을 때만)
+export const KEY_CUT = 'cut';          // 정시 배치기준표 캐시 (대학 공개 자료 — 이름 없음)
 
 export async function clearRoster() { await del(KEY_ROSTER); }
 
@@ -44,5 +45,6 @@ export async function clearAll() {
   await del(KEY_DATA);
   await del(KEY_ROSTER);
   await del(KEY_MOCK);
+  await del(KEY_CUT);
   await del(KEY_LINK);
 }

@@ -2,10 +2,11 @@ import { GAS_URL, SCHOOL, ROSTER_STEPS } from '../config.js';
 import * as store from './store.js';
 import * as api from './api.js';
 import { encode, decode } from './codec.js';
-import { parseHistory, parseRoster, parseMockExam, mergeMockExam, pctAvg } from './parse.js';
+import { parseHistory, parseRoster, parseMockExam, mergeMockExam, pctAvg, examInfo, parseCutTable } from './parse.js';
 import {
   buildIndex, findSimilar, summarize, aggregateUniv, aggregateTrack, aggregateJeongsi, csatAvg,
   findSimilarJeongsi, summarizeJeongsi, aggregateJeongsiUniv, aggregateGroup,
+  placement, schoolJeongsiStats,
 } from './match.js';
 import * as R from './render.js';
 
@@ -14,10 +15,13 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 
 const S = {
   key: null, admin: null, history: null, index: null, version: null,
-  roster: null,   // 3학년 학생부성적표 (수시·정시 상담)
-  mock: null,     // 2학년 모의고사 성적표 (정시 상담)
+  roster: null,   // 학생부성적표 (수시·정시 상담) — 학년은 파일에서 읽음
+  mock: null,     // 모의고사 성적표 (정시 상담) — 학년은 파일에서 읽음
   cur: null,      // 선택한 학생 (현재 모드의 명단에서)
   mode: 'susi',   // 'susi' | 'jg'
+  cut: null,      // 정시 배치기준표 (대학 공개 입시결과)
+  cutVersion: null,
+  school: null,   // 우리 학교 5개년 정시 지원 집계
 };
 
 /* ── 표지 조각 ─────────────────────────────────────── */
@@ -91,7 +95,7 @@ function screenBlocked(reason) {
 
 function screenUpload(err) {
   const m = S.history.meta;
-  const tag = (loaded, n) => loaded ? `<span class="p-tag">${n}명 불러옴</span>` : '';
+  const tag = d => d ? `<span class="p-tag">${esc(d.meta.label || '')} ${d.meta.n}명 불러옴</span>` : '';
   cover(`<div class="cv-main">${LEFT()}
     <div>
       <div class="cv-panel">
@@ -103,25 +107,25 @@ function screenUpload(err) {
       </div>
 
       <div class="cv-panel">
-        <div class="p-head"><span class="p-num">2</span><h2>3학년 명단 · 수시·정시 상담</h2>${tag(S.roster, S.roster?.meta.n)}</div>
-        <div class="p-hint">학생부성적표를 올리면 학급·이름으로 학생을 골라 상담할 수 있습니다.</div>
+        <div class="p-head"><span class="p-num">2</span><h2>학생부성적표 · 수시·정시 상담</h2>${tag(S.roster)}</div>
+        <div class="p-hint">내신이 든 학생부성적표를 올리면 학급·이름으로 학생을 골라 상담할 수 있습니다. 학년은 파일에서 자동으로 읽습니다.</div>
         ${HOWTO}
         <div class="dropzone" id="dz">
           <strong>파일을 끌어다 놓거나 클릭해서 선택</strong>
-          <div class="dz-hint">○○○○년 학생부성적표 … 3학년.xlsx</div>
+          <div class="dz-hint">○○○○년 학생부성적표 … ○학년.xlsx</div>
           <div class="dz-tags"><span class="dz-tag">학급·번호·이름</span>
             <span class="dz-tag">학년별 내신</span><span class="dz-tag">과목별 등급</span></div>
         </div>
       </div>
 
       <div class="cv-panel">
-        <div class="p-head"><span class="p-num">3</span><h2>2학년 모의고사 · 정시 상담</h2>${tag(S.mock, S.mock?.meta.n)}
+        <div class="p-head"><span class="p-num">3</span><h2>모의고사 성적표 · 정시 상담</h2>${tag(S.mock)}
           ${S.mock ? '' : '<span class="p-tag" style="opacity:.6">선택</span>'}</div>
-        <div class="p-hint">교육청 영역별 기준 수능성적표(.xls)를 올리면 2학년 모의고사 성적으로 정시만 상담할 수 있습니다.
-          반별 파일이면 여러 개를 한꺼번에 골라도 됩니다.</div>
+        <div class="p-hint">교육청·평가원 영역별 기준 수능성적표(.xls)를 올리면 모의고사 성적으로 정시만 상담할 수 있습니다.
+          어느 학년이든 됩니다. 반별 파일이면 여러 개를 한꺼번에 골라도 됩니다.</div>
         <div class="dropzone" id="dz2">
           <strong>파일을 끌어다 놓거나 클릭해서 선택</strong>
-          <div class="dz-hint">○○○○년 ○월 교육청 영역별 기준 수능성적표 … 2학년.xls</div>
+          <div class="dz-hint">○○○○년 ○월 교육청 영역별 기준 수능성적표 … ○학년.xls</div>
           <div class="dz-tags"><span class="dz-tag">등급·백분위·표준점수</span><span class="dz-tag">반별 파일 여러 개 가능</span></div>
         </div>
       </div>
@@ -160,11 +164,12 @@ async function loadRoster(file) {
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
     const data = parseRoster(wb, XLSX);
     if (!data.students.length) throw new Error('학생을 찾지 못했습니다. 학생부성적표 파일이 맞는지 확인해 주세요.');
+    Object.assign(data.meta, examInfo(file.name, data.students));
     S.roster = data;
     if (keepChecked()) await store.set(store.KEY_ROSTER, data); else await store.del(store.KEY_ROSTER);
     showApp('susi');
   } catch (e) {
-    screenUpload('3학년 명단을 읽지 못했습니다 — ' + e.message);
+    screenUpload('학생부성적표를 읽지 못했습니다 — ' + e.message);
   }
 }
 
@@ -188,11 +193,12 @@ async function loadMock(files) {
       if (!one.students.length) throw new Error(`${f.name} 에서 학생을 찾지 못했습니다.`);
       merged = merged ? mergeMockExam(merged, one) : one;
     }
+    Object.assign(merged.meta, examInfo(files[0].name, merged.students));
     S.mock = merged;
     if (keepChecked()) await store.set(store.KEY_MOCK, merged); else await store.del(store.KEY_MOCK);
     showApp('jg');
   } catch (e) {
-    screenUpload('2학년 모의고사 성적표를 읽지 못했습니다 — ' + e.message);
+    screenUpload('모의고사 성적표를 읽지 못했습니다 — ' + e.message);
   }
 }
 
@@ -203,10 +209,13 @@ function showApp(mode) {
   $('app').classList.remove('hidden');
   if (!S.index) S.index = buildIndex(S.history);
   const m = S.history.meta;
+  const gl = d => d?.meta.grade ? `${d.meta.grade}학년` : '';
   $('sb-scope').innerHTML =
     `<div class="row"><span>5개년 자료</span><b>지원 ${m.nApps.toLocaleString()}건</b></div>` +
-    (S.roster ? `<div class="row"><span>3학년 명단</span><b class="off">${S.roster.meta.n}명</b></div>` : '') +
-    (S.mock ? `<div class="row"><span>2학년 모의</span><b class="off">${S.mock.meta.n}명</b></div>` : '');
+    (S.roster ? `<div class="row"><span>${gl(S.roster)} 학생부</span><b class="off">${S.roster.meta.n}명</b></div>` : '') +
+    (S.mock ? `<div class="row"><span>${esc(S.mock.meta.label || '모의고사')}</span><b class="off">${S.mock.meta.n}명</b></div>` : '');
+  $('m-susi').textContent = S.roster ? `${gl(S.roster)} ${S.roster.meta.n}명`.trim() : '명단 없음';
+  $('m-jg').textContent = S.mock ? (S.mock.meta.label || `${S.mock.meta.n}명`) : '명단 없음';
   setMode(mode || S.mode);
 }
 
@@ -219,8 +228,10 @@ function setMode(mode) {
   $('stucard').classList.add('hidden');
   $('t-univ').textContent = mode === 'jg' ? '대학·학과' : '대학·전형';
   $('t-track').textContent = mode === 'jg' ? '군별 배분' : '카드 배분';
-  document.querySelector('.tab[data-t=jg]').classList.toggle('hidden', mode === 'jg');
-  $('btn-roster').textContent = mode === 'jg' ? '2학년 모의고사 성적표 올리기' : '3학년 명단 다시 올리기';
+  $('t-jg').textContent = mode === 'jg' ? '배치' : '정시';
+  document.querySelector('.tab[data-t="jg"]')?.classList.remove('hidden');
+  $('c-jg').textContent = '';
+  $('btn-roster').textContent = mode === 'jg' ? '모의고사 성적표 올리기' : '학생부성적표 다시 올리기';
   selectTab('stu');
   fillClasses();
   fillStudents();
@@ -229,7 +240,7 @@ function setMode(mode) {
   $('placeholder').innerHTML = mode === 'jg'
     ? (S.mock
       ? '왼쪽에서 <b>학생을 선택</b>하면 수능 백분위가 비슷했던 졸업생들의 <b>정시</b> 지원 결과가 여기에 표시됩니다.<br><span class="fine">명단에 없으면 백분위를 직접 입력해도 됩니다.</span>'
-      : '2학년 모의고사 성적표가 아직 없습니다.<br><span class="fine">왼쪽 아래 「2학년 모의고사 성적표 올리기」를 누르거나, 백분위를 직접 입력하세요.</span>')
+      : '모의고사 성적표가 아직 없습니다.<br><span class="fine">왼쪽 아래 「모의고사 성적표 올리기」를 누르거나, 백분위를 직접 입력하세요.</span>')
     : '왼쪽에서 <b>학생을 선택</b>하면 성적이 비슷했던 졸업생들의 지원 결과가 여기에 표시됩니다.<br><span class="fine">명단에 없으면 내신 전교과를 직접 입력해도 됩니다.</span>';
   run();
 }
@@ -342,13 +353,20 @@ function runJeongsi() {
   $('rtitle').textContent = S.cur ? `${S.cur.nm} · 정시 유사 사례` : '정시 유사 사례';
   $('rnote').textContent = `백분위 평균 ${lo.toFixed(0)}~${hi.toFixed(0)} 구간 졸업생 ${sel.length}명 · 정시 지원만`;
   $('stats').innerHTML = R.jeongsiStatBar(sel, sum);
-  $('headline').innerHTML = R.jeongsiHeadline(sum, sel, pct, eng, S.cur?.nm, groups);
+  $('headline').innerHTML = R.jeongsiHeadline(sum, sel, pct, eng, S.cur?.nm, groups, S.mock?.meta);
   $('p-stu').innerHTML = R.jeongsiStudents(sel, rows);
   const uni = aggregateJeongsiUniv(sum.jg);
   $('p-univ').innerHTML = R.jeongsiUnivTable(uni);
   $('p-track').innerHTML = R.groupTable(groups, sum);
-  $('p-jg').innerHTML = '';
-  finish(sel, { univ: uni.length, jg: '' });
+  const myGrade = S.cur?.grade ? (() => { const g = [S.cur.grade.k, S.cur.grade.m, S.cur.grade.s1, S.cur.grade.s2].filter(x => x != null); return g.length ? g.reduce((a, b) => a + b, 0) / g.length : null; })() : null;
+  if (!S.school) S.school = schoolJeongsiStats(S.index);
+  /* 배치 탭은 배치기준표를 올린 학교에서만 나타납니다. 없으면 탭 자체를 감춥니다. */
+  const pl = S.cut ? placement(S.cut, { pct, eng, myGrade, gy: selGy, similarRows: sum.jg, school: S.school }) : null;
+  const tabJg = document.querySelector('.tab[data-t="jg"]');
+  if (tabJg) tabJg.classList.toggle('hidden', !S.cut);
+  if (!S.cut && document.querySelector('.tab[data-t="jg"][aria-selected="true"]')) selectTab('stu');
+  $('p-jg').innerHTML = S.cut ? R.placementTable(pl, { exam: S.mock?.meta, cutMeta: S.cut.meta }) : '';
+  finish(sel, { univ: uni.length, jg: pl ? pl.list.length : '' });
 }
 
 /* ── 관리자 ────────────────────────────────────────── */
@@ -372,11 +390,56 @@ function screenAdmin(status, msg) {
           <span id="a-parsed">파일을 올리면 건수를 확인합니다</span></span>
           <button class="mini" id="a-send" disabled>시트에 반영</button></div>
       </div>
+      <div class="cv-panel">
+        <div class="p-head"><span class="p-num">정</span><h2>정시 배치기준표</h2>
+          <span class="p-tag">${esc(status?.배치요약 || '아직 없음')}</span></div>
+        <div class="p-hint">각 대학 입학처가 공개한 전년도 정시 입시결과를 모은 엑셀입니다. 행을 더하거나 고쳐서 다시 올리면 됩니다.${status?.배치갱신 ? ` 최종 갱신 ${esc(status.배치갱신)}` : ''}</div>
+        <div class="adm-row"><span class="n">1</span><span class="t"><b>배치기준 엑셀 올리기</b>
+          <span>대학 · 모집단위 · 백분위70 열이 있는 파일</span></span>
+          <button class="mini" id="c-pick">파일 선택</button></div>
+        <div class="adm-row"><span class="n">2</span><span class="t"><b>변환 확인</b>
+          <span id="c-parsed">파일을 올리면 대학 수를 확인합니다</span></span>
+          <button class="mini" id="c-send" disabled>시트에 반영</button></div>
+      </div>
       ${msg ? `<div class="cv-panel"><div class="p-hint" style="color:#e5ebfa">${msg}</div></div>` : ''}
     </div>
   </div>`, [['d-gold', '관리자']]);
   $('a-pick').addEventListener('click', () => $('f-history').click());
   $('a-send').addEventListener('click', sendHistory);
+  $('c-pick').addEventListener('click', () => $('f-cut').click());
+  $('c-send').addEventListener('click', sendCut);
+}
+
+let pendingCut = null;
+
+async function pickCut(file) {
+  $('c-parsed').textContent = `${file.name} 읽는 중…`;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const data = parseCutTable(wb, XLSX);
+    if (!data.rows.length) throw new Error('「대학」「모집단위」 열이 있는 시트를 찾지 못했습니다.');
+    pendingCut = data;
+    const m = data.meta;
+    const withPct = data.rows.filter(r => r.pct70 != null || r.pct50 != null).length;
+    $('c-parsed').innerHTML = `<b style="color:#e5ebfa">${m.nUniv}개 대학</b> · ${m.n}개 모집단위 · 백분위 있음 ${withPct}개${m.years.length ? ` · ${m.years.join('·')}학년도` : ''}`;
+    $('c-send').disabled = false;
+  } catch (e) {
+    $('c-parsed').innerHTML = `<span style="color:#ff9c9c">읽지 못했습니다 — ${esc(e.message)}</span>`;
+    $('c-send').disabled = true;
+  }
+}
+
+async function sendCut() {
+  if (!pendingCut) return;
+  $('c-send').disabled = true;
+  try {
+    const res = await api.uploadData(S.admin, pendingCut, (i, n) => { $('c-parsed').textContent = `보내는 중 ${i}/${n}`; }, 'cut');
+    await store.del(store.KEY_CUT);
+    screenAdmin(await api.adminStatus(S.admin).catch(() => null), `배치기준표 반영이 끝났습니다. ${esc(res.요약 || '')}`);
+  } catch (e) {
+    $('c-parsed').innerHTML = `<span style="color:#ff9c9c">${esc(e.message)}</span>`;
+    $('c-send').disabled = false;
+  }
 }
 
 let pending = null;
@@ -418,7 +481,10 @@ async function loadHistory() {
   if (cached?.enc) {
     S.history = decode(cached.enc);
     S.version = cached.version;
-    api.fetchVersion(S.key).then(v => { if (v.version && v.version !== S.version) refresh(); }).catch(() => {});
+    api.fetchVersion(S.key).then(v => {
+      if (v.version && v.version !== S.version) refresh();
+      loadCut(v.cutVersion);
+    }).catch(() => loadCut(null));
     return;
   }
   screenLoading('5개년 지원결과를 불러오는 중', 55);
@@ -426,6 +492,20 @@ async function loadHistory() {
   S.history = decode(res.data);
   S.version = res.version;
   await store.set(store.KEY_DATA, { enc: res.data, version: res.version });
+  await loadCut(null);
+}
+
+/* 배치기준표 — 없어도 프로그램은 돌아갑니다. 조용히 시도합니다. */
+async function loadCut(serverVersion) {
+  const cached = await store.get(store.KEY_CUT);
+  if (cached?.data && (!serverVersion || cached.version === serverVersion)) { S.cut = cached.data; S.cutVersion = cached.version; return; }
+  try {
+    const res = await api.fetchCut(S.key);
+    if (!res.ok || !res.data?.rows) { if (cached?.data) { S.cut = cached.data; } return; }
+    S.cut = res.data; S.cutVersion = res.version;
+    await store.set(store.KEY_CUT, { data: res.data, version: res.version });
+    if (S.mode === 'jg' && S.index && !$('app').classList.contains('hidden')) run();
+  } catch { if (cached?.data) S.cut = cached.data; }
 }
 
 async function refresh() {
@@ -478,6 +558,22 @@ function selectTab(t) {
 $('f-roster').addEventListener('change', e => { if (e.target.files[0]) loadRoster(e.target.files[0]); e.target.value = ''; });
 $('f-mock').addEventListener('change', e => { if (e.target.files.length) loadMock([...e.target.files]); e.target.value = ''; });
 $('f-history').addEventListener('change', e => { if (e.target.files[0]) pickHistory(e.target.files[0]); e.target.value = ''; });
+$('f-cut').addEventListener('change', e => { if (e.target.files[0]) pickCut(e.target.files[0]); e.target.value = ''; });
+
+/* 배치 탭 안의 판정 칩·검색 */
+function filterPlacement() {
+  const j = $('p-jg').querySelector('#plchips .chip[aria-pressed=true]')?.dataset.j || 'all';
+  const q = ($('p-jg').querySelector('#plq')?.value || '').trim().toLowerCase();
+  $('p-jg').querySelectorAll('tr.pl').forEach(tr => {
+    tr.classList.toggle('hidden', (j !== 'all' && tr.dataset.j !== j) || (q && !tr.dataset.q.includes(q)));
+  });
+}
+$('p-jg').addEventListener('click', e => {
+  const b = e.target.closest('#plchips .chip'); if (!b || b.disabled) return;
+  b.parentElement.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', 'false'));
+  b.setAttribute('aria-pressed', 'true'); filterPlacement();
+});
+$('p-jg').addEventListener('input', e => { if (e.target.id === 'plq') filterPlacement(); });
 
 $('cls').addEventListener('change', fillStudents);
 $('q').addEventListener('input', fillStudents);
