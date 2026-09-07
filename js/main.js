@@ -704,11 +704,15 @@ async function loadHistory() {
   if (cached?.enc) {
     S.history = decode(cached.enc);
     S.version = cached.version;
+    /* 이 컴퓨터에 남아 있는 자료를 먼저 붙입니다 — 화면이 뜬 뒤에 탭이 뒤늦게 나타나지 않도록.
+       새 자료가 있는지는 뒤에서 조용히 확인합니다. */
+    await loadCut();
+    await loadSel();
     api.fetchVersion(S.key).then(v => {
       if (v.version && v.version !== S.version) refresh();
       loadCut(v.cutVersion);
       loadSel(v.selVersion);
-    }).catch(() => { loadCut(null); loadSel(null); });
+    }).catch(() => { /* 다음 접속 때 다시 확인합니다 */ });
     return;
   }
   screenLoading('5개년 지원결과를 불러오는 중', 55);
@@ -723,14 +727,16 @@ async function loadHistory() {
 /* 배치기준표 — 없어도 프로그램은 돌아갑니다. 조용히 시도합니다. */
 async function loadCut(serverVersion) {
   const cached = await store.get(store.KEY_CUT);
-  if (cached?.data && (!serverVersion || cached.version === serverVersion)) { S.cut = cached.data; S.cutVersion = cached.version; return; }
+  if (cached?.data) { S.cut = cached.data; S.cutVersion = cached.version; }
+  if (serverVersion === undefined) return;   /* 캐시만 붙이는 호출 */
+  if (cached?.data && serverVersion && cached.version === serverVersion) return;
   try {
     const res = await api.fetchCut(S.key);
-    if (!res.ok || !res.data?.rows) { if (cached?.data) { S.cut = cached.data; } return; }
+    if (!res.ok || !res.data?.rows) return;
     S.cut = res.data; S.cutVersion = res.version;
     await store.set(store.KEY_CUT, { data: res.data, version: res.version });
     if (S.mode === 'jg' && S.index && !$('app').classList.contains('hidden')) run();
-  } catch { if (cached?.data) S.cut = cached.data; }
+  } catch { /* 캐시가 있으면 그대로 씁니다 */ }
 }
 
 /* 선택과목 자료 — 없어도 프로그램은 돌아갑니다. 조용히 시도합니다. */
@@ -746,16 +752,16 @@ async function loadSel(serverVersion) {
       if (S.mode === 'sel') { fillSelStudents(); selPaint(); }
     }
   };
-  if (cached?.data && (!serverVersion || cached.version === serverVersion)) {
-    S.selVersion = cached.version; await use(cached.data); return;
-  }
+  if (cached?.data) { S.selVersion = cached.version; await use(cached.data); }
+  if (serverVersion === undefined) return;   /* 캐시만 붙이는 호출 */
+  if (cached?.data && serverVersion && cached.version === serverVersion) return;
   try {
     const res = await api.fetchSel(S.key);
-    if (!res.ok || !res.data?.fields) { if (cached?.data) await use(cached.data); return; }
+    if (!res.ok || !res.data?.fields) return;
     S.selVersion = res.version;
     await store.set(store.KEY_SEL, { data: res.data, version: res.version });
     await use(res.data);
-  } catch { if (cached?.data) await use(cached.data); }
+  } catch { /* 캐시가 있으면 그대로 씁니다 */ }
 }
 
 async function refresh() {
