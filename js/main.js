@@ -245,6 +245,7 @@ function showApp(mode) {
 function setMode(mode) {
   S.mode = mode;
   S.cur = null;
+  if ($('gpasubs')) $('gpasubs').innerHTML = '';
   document.querySelectorAll('#modechips .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.mode === mode)));
 
   /* 과목 선택은 성적이 아니라 편제를 다루므로 사이드바 구성이 다릅니다. */
@@ -306,7 +307,11 @@ function fillStudents() {
 
 function onStudentChange() {
   const v = $('stu').value;
-  if (!v) { S.cur = null; $('stucard').classList.add('hidden'); $('gpanote').textContent = ''; return; }
+  if (!v) {
+    S.cur = null; $('stucard').classList.add('hidden');
+    $('gpanote').textContent = ''; $('gpasubs').innerHTML = '';
+    return;
+  }
   const [c, no] = v.split('-').map(Number);
   S.cur = currentList().find(s => s.c === c && s.no === no) || null;
   if (!S.cur) return;
@@ -320,6 +325,7 @@ function onStudentChange() {
     $('stucard').innerHTML = R.studentCard(S.cur, S.roster.meta.n);
     $('gpa').value = S.cur.g[3].toFixed(2);
     $('gpanote').textContent = '';
+    $('gpasubs').innerHTML = R.gpaSubs(S.cur);
   }
   $('stucard').classList.remove('hidden');
   run();

@@ -207,7 +207,18 @@ button{font-family:inherit}
 .row2.mt{margin-top:4px}
 .gpa-in{margin-top:10px}
 .gpa-in label{display:block;font-size:11.5px;color:#c3cdea;font-weight:700;margin-bottom:6px}
-.gpa-in input{font-size:18px;font-weight:800;text-align:center;padding:9px}
+.gpa-row{display:flex;gap:9px;align-items:stretch}
+.gpa-in input{font-size:19px;font-weight:800;text-align:center;padding:9px;
+  flex:0 0 96px;min-width:0}
+/* 교과별 등급 — 학생을 고르면 나타납니다. 직접 입력일 때는 비어 있습니다. */
+.gpa-subs{flex:1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;
+  background:rgba(160,180,235,.16);border:1px solid rgba(160,180,235,.22);
+  border-radius:9px;overflow:hidden;min-width:0}
+.gpa-subs:empty{display:none}
+.gpa-subs div{background:rgba(9,14,36,.5);padding:5px 2px;text-align:center;min-width:0}
+.gpa-subs span{display:block;font-size:10.5px;color:#93a0c4;line-height:1.3}
+.gpa-subs b{display:block;font-size:14px;font-weight:800;color:#e5ebfa;line-height:1.35;
+  font-variant-numeric:tabular-nums}
 .gpanote{color:#ffb0b0;font-weight:700;font-size:10.5px}
 .sg{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
 .sg label{display:block;text-align:center;font-size:10.5px;color:#aeb9dd;font-weight:700;margin-bottom:4px}

@@ -54,7 +54,18 @@ const bigRow = a => `<div class="md-r">
 
 /* ── 학생 카드 (좌측) ────────────────────────────────── */
 
-const SUBN = ['국', '수', '영', '사', '과'];
+const SUBN = ['국', '영', '수', '사', '과'];
+/* 성적표 열 순서는 국·수·영·사·과입니다. 화면에는 국·영·수 순으로 보여 줍니다. */
+const SUBI = [0, 2, 1, 3, 4];
+
+/* 내신 입력칸 옆에 붙는 교과별 등급 */
+export function gpaSubs(st) {
+  if (!st?.s) return '';
+  return SUBI.map((j, i) => {
+    const v = st.s[j];
+    return `<div><span>${SUBN[i]}</span><b>${v != null ? v.toFixed(2) : '—'}</b></div>`;
+  }).join('');
+}
 
 export function studentCard(st, total) {
   const g = st.g;
@@ -68,8 +79,8 @@ export function studentCard(st, total) {
     <div class="trend">
       ${[0, 1, 2].map(i => `<div><span>${i + 1}학년</span><b>${g[i] != null ? g[i].toFixed(2) : '—'}</b></div>`).join('')}
       <div class="cur"><span>전교과</span><b>${g[3].toFixed(2)}</b></div>
-    </div>
-    <div class="subs">${st.s.map((x, i) => `<div><span>${SUBN[i]}</span><b>${x != null ? x.toFixed(2) : '—'}</b></div>`).join('')}</div>`;
+    </div>`;
+  /* 교과별 등급은 바로 아래 「내신 전교과」 칸 옆에 나오므로 여기서는 뺍니다. */
 }
 
 /* ── 요약 ────────────────────────────────────────────── */
