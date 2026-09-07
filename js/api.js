@@ -4,6 +4,7 @@
    사전 확인(preflight)을 생략하고, GAS 가 처리할 수 있습니다. */
 
 import { GAS_URL } from '../config.js';
+import * as CFG from '../config.js';
 
 function url(params) {
   const u = new URL(GAS_URL);
@@ -46,7 +47,7 @@ export async function fetchData(key, onProgress) {
 /* 관리자 — 새 자료 올리기. 40,000자씩 잘라 보냅니다. */
 const CHUNK = 40000;
 
-export async function uploadData(adminKey, encoded, onProgress, kind = 'data') {
+export async function uploadData(adminKey, encoded, onProgress, kind = 'data', extra = {}) {
   const text = JSON.stringify(encoded);
   const parts = [];
   for (let i = 0; i < text.length; i += CHUNK) parts.push(text.slice(i, i + CHUNK));
@@ -56,7 +57,7 @@ export async function uploadData(adminKey, encoded, onProgress, kind = 'data') {
     await post({ action: 'chunk', admin: adminKey, seq: i, data: parts[i], kind });
     onProgress?.(i + 1, parts.length);
   }
-  return post({ action: 'commit', admin: adminKey, meta: encoded.meta, kind });
+  return post({ action: 'commit', admin: adminKey, meta: encoded.meta, kind, ...extra });
 }
 
 /* 정시 배치기준표 내려받기 (없으면 ok:false — 정상입니다) */
@@ -78,6 +79,40 @@ export async function fetchSel(key) {
   const res = await fetch(url({ k: key, mode: 'sel' }));
   if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
   return res.json();
+}
+
+/* ── 정시 자료 자동 받기 ────────────────────────────
+   제작자 저장소에서 최신 파일을 확인하고 내려받습니다. 관리자 화면에서만 씁니다. */
+
+const REPO = () => CFG.JG_REPO || 'SearchUnivMajor/SearchUnivMajorPossibility';
+
+export async function jgLatest() {
+  const res = await fetch(`https://api.github.com/repos/${REPO()}/contents/`, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (!res.ok) throw new Error(`저장소를 읽지 못했습니다 (${res.status})`);
+  const list = await res.json();
+  const f = (Array.isArray(list) ? list : []).find(x => /\.xlsb$/i.test(x.name || ''));
+  if (!f) throw new Error('저장소에서 .xlsb 파일을 찾지 못했습니다.');
+  return { name: f.name, sha: f.sha, size: f.size, url: f.download_url };
+}
+
+export async function jgDownload(url, onProgress) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`파일을 받지 못했습니다 (${res.status})`);
+  const total = Number(res.headers.get('content-length')) || 0;
+  if (!res.body || !total) return new Uint8Array(await res.arrayBuffer());
+  const reader = res.body.getReader();
+  const parts = []; let got = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value); got += value.length;
+    onProgress?.(got, total);
+  }
+  const out = new Uint8Array(got); let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
 }
 
 /* 관리자 — 현재 상태 확인 */

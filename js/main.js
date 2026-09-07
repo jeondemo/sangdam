@@ -618,8 +618,11 @@ function screenAdmin(status, msg) {
         <div class="p-hint">62개 대학의 정시 결과와 수능 반영 방식이 든 파일(.xlsb)입니다.
           매월 새 파일이 나오면 여기에 다시 올리면 됩니다.${status?.정시갱신 ? ` 최종 갱신 ${esc(status.정시갱신)}` : ''}<br>
           ${esc(JG_CREDIT)}</div>
-        <div class="adm-row"><span class="n">1</span><span class="t"><b>정시 파일 올리기</b>
-          <span>26정시 · 25정시 · 24정시 시트가 있는 파일</span></span>
+        <div class="adm-row"><span class="n">↓</span><span class="t"><b>제작자 저장소에서 바로 받기</b>
+          <span id="j-remote">누르면 새 파일이 있는지 확인합니다</span></span>
+          <button class="mini" id="j-check">새 파일 확인</button></div>
+        <div class="adm-row"><span class="n">1</span><span class="t"><b>파일을 직접 올리기</b>
+          <span>내려받아 두신 파일이 있으면 이쪽으로</span></span>
           <button class="mini" id="j-pick">파일 선택</button></div>
         <div class="adm-row"><span class="n">2</span><span class="t"><b>변환 확인</b>
           <span id="j-parsed">파일을 올리면 모집단위 수를 확인합니다</span></span>
@@ -644,6 +647,7 @@ function screenAdmin(status, msg) {
   $('a-send').addEventListener('click', sendHistory);
   $('c-pick').addEventListener('click', () => $('f-cut').click());
   $('c-send').addEventListener('click', sendCut);
+  $('j-check').addEventListener('click', () => checkJG(status?.정시SHA || ''));
   $('j-pick').addEventListener('click', () => $('f-jg').click());
   $('j-send').addEventListener('click', sendJG);
   $('s-pick2').addEventListener('click', () => $('f-sel').click());
@@ -682,7 +686,38 @@ async function sendCut() {
   }
 }
 
-let pendingJG = null;
+let pendingJG = null, pendingSha = '';
+
+/* 저장소에서 새 파일이 있는지 보고, 있으면 받아서 바로 변환까지 합니다. */
+async function checkJG(savedSha) {
+  const say = h => { $('j-remote').innerHTML = h; };
+  $('j-check').disabled = true;
+  try {
+    say('저장소를 확인하는 중…');
+    const f = await api.jgLatest();
+    const mb = (f.size / 1048576).toFixed(1);
+    if (savedSha && savedSha === f.sha) {
+      say(`<b style="color:#9be6b4">이미 최신입니다</b> — ${esc(f.name)} · ${mb}MB`);
+      $('j-check').disabled = false; return;
+    }
+    say(`<b style="color:#e5ebfa">새 파일이 있습니다</b> — ${esc(f.name)} · ${mb}MB · 받는 중…`);
+    const buf = await api.jgDownload(f.url, (got, total) => {
+      say(`받는 중 ${(got / 1048576).toFixed(1)} / ${mb} MB`);
+    });
+    say(`받았습니다. 읽는 중… <span class="wn">(파일이 커서 30초쯤 걸립니다)</span>`);
+    await new Promise(r => setTimeout(r, 30));
+    const wb = XLSX.read(buf, { type: 'array', sheets: ['26정시', '25정시', '24정시'] });
+    pendingJG = parseJeongsiFile(wb, XLSX);
+    pendingSha = f.sha;
+    const m = pendingJG.meta;
+    say(`<b style="color:#9be6b4">${esc(f.name)}</b> — ${m.nUniv}개 대학 · ${m.n.toLocaleString()}개 모집단위`);
+    $('j-parsed').innerHTML = `저장소에서 받은 파일입니다. 아래 「시트에 반영」을 누르세요.`;
+    $('j-send').disabled = false;
+  } catch (e) {
+    say(`<span style="color:#ff9c9c">${esc(e.message)}</span>`);
+  }
+  $('j-check').disabled = false;
+}
 
 async function pickJG(file) {
   $('j-parsed').textContent = `${file.name} 읽는 중… (파일이 커서 몇 초 걸립니다)`;
@@ -690,7 +725,7 @@ async function pickJG(file) {
     /* 필요한 시트만 읽습니다 — 전체를 읽으면 훨씬 오래 걸립니다. */
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', sheets: ['26정시', '25정시', '24정시'] });
     const data = parseJeongsiFile(wb, XLSX);
-    pendingJG = data;
+    pendingJG = data; pendingSha = '';
     const m = data.meta;
     $('j-parsed').innerHTML = `<b style="color:#e5ebfa">${m.nUniv}개 대학</b> · ${m.n.toLocaleString()}개 모집단위 · ${m.years.join('·')}학년도`;
     $('j-send').disabled = false;
@@ -704,7 +739,8 @@ async function sendJG() {
   if (!pendingJG) return;
   $('j-send').disabled = true;
   try {
-    const res = await api.uploadData(S.admin, pendingJG, (i, n) => { $('j-parsed').textContent = `보내는 중 ${i}/${n}`; }, 'jg');
+    const res = await api.uploadData(S.admin, pendingJG,
+      (i, n) => { $('j-parsed').textContent = `보내는 중 ${i}/${n}`; }, 'jg', { sha: pendingSha });
     await store.del(store.KEY_JG);
     screenAdmin(await api.adminStatus(S.admin).catch(() => null), `정시 자료 반영이 끝났습니다. ${esc(res.요약 || '')}`);
   } catch (e) {
