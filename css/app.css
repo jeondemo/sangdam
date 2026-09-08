@@ -739,3 +739,18 @@ table.jgtbl td.b{font-weight:700}
 .adm-files .sc{border:1px dashed rgba(255,210,122,.6);color:#ffd27a;border-radius:99px;padding:2px 9px;font-weight:700}
 .adm-files .sc.on{border-style:solid;border-color:rgba(127,216,160,.6);color:#7fd8a0}
 .adm-files .af-sum i{font-style:normal;color:#ffd27a}
+
+/* ══ 과목 선택 — 학교 지정 과목 띠 ══ */
+.semblk .fixedc{grid-column:1/-1;display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;
+  background:#fff;border:1px dashed #b9c3d6;border-radius:12px;padding:10px 14px}
+.semblk .fixedc .fl{display:flex;flex-direction:column;margin-right:6px;min-width:120px}
+.semblk .fixedc .fl b{font-size:13px;font-weight:800;color:#3b4a63}
+.semblk .fixedc .fl small{font-size:10.5px;color:#7c8a9c}
+.semblk .fixedc .fx{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:5px 10px 5px 7px;
+  border-radius:9px;background:#f3f5f9;color:#5b6b7c}
+.semblk .fixedc .fx.rel{background:#fff;border:1px solid #dde3ec;color:var(--ink)}
+.semblk .fixedc .fx .bx{width:16px;height:16px;border-radius:4px;background:#8a96aa;color:#fff;font-size:10px;
+  font-style:normal;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.semblk .fixedc .fx.rel .bx{background:#3b4a63}
+.semblk .fixedc .fx b{font-weight:700}
+.semblk .fixedc .fx small{font-size:11px;color:#7c8a9c}

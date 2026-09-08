@@ -613,12 +613,24 @@ export function selPanel(sel, st) {
     const oc = overCore(g, picked);
     if (oc) warn.push(`${gl}에 핵심 과목이 ${oc.length}개인데 자리는 ${g.pick}개입니다 — ${oc.map(esc).join(', ')} 중에서 골라야 합니다.`);
   }
+  /* 학교 지정 과목 — 편제표에서 「개별 학생 선택」 윗줄. 고르는 게 아니라 전원이 듣는 과목이라
+     묶음 카드 위에 잠긴 체크로 깔아 둡니다. 태그는 골라야 하는 과목과 같은 기준입니다. */
+  const fixedStrip = sem => {
+    const list = sel.school.common.filter(c => c.sem === sem);
+    if (!list.length) return '';
+    const items = list.map(c => {
+      const m = mergeSub(picked, c.s);
+      const tag = m ? `<span class="tag ${TCLS[m.t]}">${TIER_NAME[m.t]}</span>` : '';
+      return `<span class="fx${m ? ' rel' : ''}"><i class="bx">✓</i><b>${esc(c.s)}</b>${m?.n ? `<small>${m.n}곳</small>` : ''}${tag}</span>`;
+    }).join('');
+    return `<div class="fixedc"><span class="fl"><b>학교 지정 과목</b><small>전원 이수 · 고르지 않아도 들어갑니다</small></span>${items}</div>`;
+  };
   const cards = Object.keys(blocks).sort().map(k => {
     const B = blocks[k];
     const semNo = (k.split('-')[1] || '1');
     const state = B.got === B.pick ? ' full' : (B.got > B.pick ? ' over' : '');
     return `<div class="semblk s${semNo}"><div class="bh"><span class="h">${esc(semName(k))}<small>묶음 ${B.cards.length}개에서 과목 ${B.pick}개를 고릅니다</small></span>
-      <span class="n${state}">고른 것 ${B.got} / ${B.pick}</span></div><div class="bd">${B.cards.join('')}</div></div>`;
+      <span class="n${state}">고른 것 ${B.got} / ${B.pick}</span></div><div class="bd">${fixedStrip(k)}${B.cards.join('')}</div></div>`;
   }).join('');
 
   const sum = picked.map(f => fieldPane(f, sel, WHERE)).join('');
