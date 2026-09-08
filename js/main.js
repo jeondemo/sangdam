@@ -10,7 +10,7 @@ import * as api from './api.js';
 import { encode, decode } from './codec.js';
 import {
   parseHistory, parseRoster, parseMockExam, mergeMockExam, pctAvg, examInfo, parseCutTable,
-  parseSubjectTable, parseSubjectChoice, mergeChoice, parseJeongsiFile,
+  parseSubjectTable, parseSubjectChoice, mergeChoice, parseJeongsiFile, ROSTER_PV,
 } from './parse.js';
 import {
   buildIndex, findSimilar, summarize, aggregateUniv, aggregateTrack, aggregateJeongsi, csatAvg,
@@ -241,7 +241,7 @@ function showApp(mode) {
   };
   $('sb-scope').innerHTML =
     `<div class="row"><span>5개년 자료</span><b>지원 ${m.nApps.toLocaleString()}건</b></div>` +
-    (S.roster ? `<div class="row"><span>${gl(S.roster)} 학생부${when(S.roster)}</span><b class="off">${S.roster.meta.n}명</b></div>` : '') +
+    (S.roster ? `<div class="row"><span>${gl(S.roster)} 학생부${when(S.roster)}${S.roster.meta.stale ? '<i class="when old">예전 판으로 읽힘 · 다시 올려 주세요</i>' : ''}</span><b class="off">${S.roster.meta.n}명</b></div>` : '') +
     (S.mock ? `<div class="row"><span>${esc(S.mock.meta.label || '모의고사')}${when(S.mock)}</span><b class="off">${S.mock.meta.n}명</b></div>` : '');
   $('m-susi').textContent = S.roster ? `${gl(S.roster)} ${S.roster.meta.n}명`.trim() : '명단 없음';
   $('m-jg').textContent = S.mock ? (S.mock.meta.label || `${S.mock.meta.n}명`) : '명단 없음';
@@ -1178,7 +1178,10 @@ async function boot() {
   S.mock = await store.get(store.KEY_MOCK);
   if (!S.roster?.students?.length) S.roster = null;
   if (!S.mock?.students?.length) S.mock = null;
+  /* 프로그램이 새로워졌는데 명단은 예전 판으로 읽혀 남아 있으면 — 다시 올리라고 알립니다. */
+  if (S.roster && S.roster.meta.pv !== ROSTER_PV) S.roster.meta.stale = true;
   if (S.roster || S.mock) showApp(S.roster ? 'susi' : 'jg');
+  if (S.roster?.meta.stale) setTimeout(() => toast('프로그램이 새로워졌습니다 — 학생부성적표를 다시 올리면 새 표시(5등급 등)가 나옵니다.'), 800);
   else screenUpload();
 }
 

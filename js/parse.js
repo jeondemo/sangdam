@@ -334,6 +334,10 @@ function applySingle9(c) {
   return out;
 }
 
+/* 명단 읽기 방식의 판. 이 컴퓨터에 남아 있던 명단이 예전 판으로 읽힌 것이면 화면이 새 항목(5등급 등)을 못 보여 주므로,
+   판이 다르면 「다시 올려 주세요」라고 알립니다. 읽는 내용이 바뀔 때마다 올립니다. */
+export const ROSTER_PV = 3;
+
 export function parseRoster(workbook, XLSX) {
   const name = workbook.SheetNames.includes('analysis') ? 'analysis' : workbook.SheetNames[0];
   const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], {
@@ -365,7 +369,7 @@ export function parseRoster(workbook, XLSX) {
   const combos = ROSTER_COMBO.filter(n => out.some(s2 => s2.cb[n]));
   /* 5등급 값이 하나라도 있으면 5등급 세대(1·2학년) 성적표입니다. 화면 라벨에 씁니다. */
   const has5 = out.some(s2 => s2.a5 != null);
-  return { students: out, meta: { n: out.length, combos, has5, layout: c.single9 ? 'single9' : 'pair', loadedAt: Date.now() } };
+  return { students: out, meta: { n: out.length, combos, has5, layout: c.single9 ? 'single9' : 'pair', pv: ROSTER_PV, loadedAt: Date.now() } };
 }
 
 /* ── 학년별 반영 비중 역산 ───────────────────────────── */
