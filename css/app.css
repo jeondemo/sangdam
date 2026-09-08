@@ -754,3 +754,10 @@ table.jgtbl td.b{font-weight:700}
 .semblk .fixedc .fx.rel .bx{background:#3b4a63}
 .semblk .fixedc .fx b{font-weight:700}
 .semblk .fixedc .fx small{font-size:11px;color:#7c8a9c}
+
+/* ══ 학생 카드 — 5등급 세대는 5등급 크게, 9등급 환산은 괄호로 ══ */
+.trend.five b{font-size:13px}
+.trend.five small{display:block;font-size:9.5px;color:#8d9ac0;line-height:1.2;margin-top:1px}
+.trend.five .cur small{color:#c9b788}
+/* 전교과 9등급 입력칸과 같은 색 — 두 카드의 9등급 칸이 같은 자리로 보이게 */
+.cbv>div.g9{background:rgba(30,48,120,.42)}

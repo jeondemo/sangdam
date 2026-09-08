@@ -71,8 +71,9 @@ export function gpaSubs(st, meta) {
   const name = (meta?.combos || []).find(n => st.cb?.[n]);
   if (name) {
     const v = st.cb[name];
+    const c9 = v.g9 == null ? '' : `<div class="g9"><span>9등급</span><b>${v.g9.toFixed(2)}</b></div>`;
     return `<div class="cbt">${esc(name)}</div>
-      <div class="cbv">${cell('5등급', v.g5)}${cell('9등급', v.g9)}</div>`;
+      <div class="cbv">${cell('5등급', v.g5)}${c9}</div>`;
   }
   if (!st.s) return '';
   return `<div class="cbt">교과별 <span class="wn">9등급</span></div>
@@ -81,8 +82,15 @@ export function gpaSubs(st, meta) {
 
 export function studentCard(st, total, meta) {
   const g = st.g;
-  /* 1·2학년 성적표(5등급 세대)의 학년별·전교과 값은 9등급 환산이라, 학생부에 적힌 5등급과 다릅니다. 표시해 둡니다. */
-  const conv = meta?.has5 ? '<div class="fine">학년별·전교과는 9등급 환산 — 학생부의 5등급은 아래 칸에 따로 나옵니다.</div>' : '';
+  /* 1·2학년(5등급 세대)은 학생부 기준인 5등급을 크게, 9등급 환산을 괄호로. 3학년(9등급 세대)은 9등급만. */
+  const five = meta?.has5 && st.g5;
+  const cell = (lab, i, cls = '') => {
+    const v9 = g[i], v5 = five ? st.g5[i] : null;
+    const big = five ? (v5 != null ? v5.toFixed(2) : '—') : (v9 != null ? v9.toFixed(2) : '—');
+    const sub = five && v9 != null ? `<small>(${v9.toFixed(2)})</small>` : '';
+    return `<div class="${cls}"><span>${lab}</span><b>${big}</b>${sub}</div>`;
+  };
+  const scale = five ? '<div class="fine">5등급 기준 · 괄호는 9등급 환산</div>' : '';
   const d = (g[2] != null && g[0] != null) ? g[2] - g[0] : null;
   const trend = d == null ? ''
     : d < -0.15 ? `<span class="up">1학년 대비 ${Math.abs(d).toFixed(2)} 상승</span>`
@@ -90,10 +98,10 @@ export function studentCard(st, total, meta) {
         : '1학년 대비 큰 변화 없음';
   return `<div class="who">${esc(st.nm)}<small>${esc(clsLabel(st.c))} ${st.no}번</small></div>
     <div class="rk">${st.r != null ? `전교 ${st.r}위 / ${total}명 · ` : ''}${trend}</div>
-    <div class="trend">
-      ${[0, 1, 2].map(i => `<div><span>${i + 1}학년</span><b>${g[i] != null ? g[i].toFixed(2) : '—'}</b></div>`).join('')}
-      <div class="cur"><span>전교과</span><b>${g[3].toFixed(2)}</b></div>
-    </div>${conv}`;
+    <div class="trend${five ? ' five' : ''}">
+      ${[0, 1, 2].map(i => cell(`${i + 1}학년`, i)).join('')}
+      ${cell('전교과', 3, 'cur')}
+    </div>${scale}`;
   /* 교과별 등급은 바로 아래 「내신 전교과」 칸 옆에 나오므로 여기서는 뺍니다. */
 }
 

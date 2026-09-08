@@ -292,6 +292,10 @@ function findRosterCols(rows) {
     g3: pick('기준교과(전교과)', '3학년'),
     all: pick('전교과', null),
     all5: pick('전교과', null, '5등급'),
+    /* 1·2학년 성적표(5등급 세대)는 학년별 5등급 칸도 채워져 옵니다 — 화면에서 5등급을 앞세우고 9등급을 괄호로 붙입니다. */
+    g15: pick('기준교과(전교과)', '1학년', '5등급'),
+    g25: pick('기준교과(전교과)', '2학년', '5등급'),
+    g35: pick('기준교과(전교과)', '3학년', '5등급'),
     ko: pick('국', null), ma: pick('수', null),
     en: pick('영', null), so: pick('사', null), sc: pick('과', null),
   };
@@ -324,7 +328,7 @@ function detectSingle9(rows, c) {
 
 function applySingle9(c) {
   const s = c.ko5;
-  const out = { ...c, ko: s, ma: s + 1, en: s + 2, so: s + 3, sc: s + 4, all5: -1, single9: true, combo: {} };
+  const out = { ...c, ko: s, ma: s + 1, en: s + 2, so: s + 3, sc: s + 4, all5: -1, g15: -1, g25: -1, g35: -1, single9: true, combo: {} };
   [['수과', 5], ['국수영', 6], ['국수영사', 7], ['국수영과', 8], ['국수영사과', 9]]
     .forEach(([n, k]) => { out.combo[n] = { g9: s + k, g5: -1 }; });
   return out;
@@ -347,6 +351,8 @@ export function parseRoster(workbook, XLSX) {
       r: num(row[0]), c: num(row[1]), no: num(row[2]), nm,
       g: [num(row[c.g1]), num(row[c.g2]), num(row[c.g3]), all],
       a5: c.all5 >= 0 ? num(row[c.all5]) : null,
+      g5: [c.g15 >= 0 ? num(row[c.g15]) : null, c.g25 >= 0 ? num(row[c.g25]) : null, c.g35 >= 0 ? num(row[c.g35]) : null,
+        c.all5 >= 0 ? num(row[c.all5]) : null],
       s: [num(row[c.ko]), num(row[c.ma]), num(row[c.en]), num(row[c.so]), num(row[c.sc])],
       cb: Object.fromEntries(Object.entries(c.combo).map(([n, ix]) => [n, {
         g5: ix.g5 >= 0 ? num(row[ix.g5]) : null,
