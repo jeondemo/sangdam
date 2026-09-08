@@ -246,7 +246,7 @@ function showApp(mode) {
   $('m-susi').textContent = S.roster ? `${gl(S.roster)} ${S.roster.meta.n}명`.trim() : '명단 없음';
   $('m-jg').textContent = S.mock ? (S.mock.meta.label || `${S.mock.meta.n}명`) : '명단 없음';
   $('c-mode-sel').classList.toggle('hidden', !S.sel);
-  if (S.sel) $('m-sel').textContent = S.choice ? `${S.choice.meta.n}명 반영` : '1·2학년';
+  if (S.sel) $('m-sel').textContent = choiceLabel(S.choice);
   setMode(mode || S.mode);
 }
 
@@ -312,6 +312,10 @@ function setMode(mode) {
     : '왼쪽에서 <b>학생을 선택</b>하면 성적이 비슷했던 졸업생들의 지원 결과가 여기에 표시됩니다.<br><span class="fine">명단에 없으면 내신 전교과를 직접 입력해도 됩니다.</span>';
   run();
 }
+
+const semLabelKo = k => String(k).replace(/^(\d)-(\d)$/, '$1학년 $2학기');
+/* 「과목 선택」 칩 밑 글씨 — 몇 명, 어느 학기가 들어왔는지 */
+const choiceLabel = c => (c ? `${c.meta.n}명 · ${(c.meta.sems || []).map(k => k.replace(/^\d-(\d)$/, '$1학기')).join('·')}` : '1·2학년');
 
 const currentList = () => (S.mode === 'jg' ? S.mock?.students : S.roster?.students) || [];
 
@@ -600,16 +604,19 @@ async function loadChoice(files) {
       parts.push(...parseSubjectChoice(wb, XLSX, f.name));
     }
     if (!parts.length) throw new Error('「이름」 열이 있는 시트를 찾지 못했습니다.');
-    S.choice = mergeChoice(parts, S.sel);
+    /* 한 파일씩 올려도 쌓입니다 — 같은 학기는 새 파일로 바꾸고, 다른 학기는 옆에 둡니다. */
+    const sems = new Set(parts.map(p => p.sem));
+    const kept = (S.choice?.meta?.src === 'local' && S.choice.parts) ? S.choice.parts.filter(p => !sems.has(p.sem)) : [];
+    const all = kept.concat(parts);
+    S.choice = mergeChoice(all, S.sel);
     S.choice.meta.src = 'local';
+    S.choice.parts = all;
     await store.set(store.KEY_CHOICE, S.choice);
-    $('m-sel').textContent = `${S.choice.meta.n}명 반영`;
+    $('m-sel').textContent = choiceLabel(S.choice);
     fillSelStudents();
     selPaint();
-    /* 학기는 시트 이름과 파일 이름에서 읽습니다. 잘못 읽히면 집계가 섞이므로 그대로 보여 드립니다. */
-    alert(`선택 결과를 읽었습니다 — 학생 ${S.choice.meta.n}명\n\n`
-      + parts.map(x => `${x.sem}  ${x.sheet} (${x.n}명)`).join('\n')
-      + '\n\n학기가 잘못 읽혔으면 파일 이름에 「2학년 2학기」처럼 넣어 다시 올려 주세요.');
+    const have = S.choice.meta.sems.map(semLabelKo).join(' · ');
+    toast(`선택 결과 ${S.choice.meta.n}명 — ${have}${S.choice.meta.sems.length < 2 ? ' (다른 학기 파일도 올리면 합쳐집니다)' : ''}`);
   } catch (e) {
     alert('선택 결과를 읽지 못했습니다 — ' + e.message);
   }
@@ -696,8 +703,9 @@ function screenAdmin(status, msg) {
           타임·인원·학생별 이수 과목이 자동으로 붙습니다.<br>
           <b>이름은 이 브라우저에서 지우고 학급·번호·과목만 보냅니다.</b> 원본 파일은 서버로 가지 않습니다.${status?.결과갱신 ? ` 최종 갱신 ${esc(status.결과갱신)}` : ''}</div>
         <div class="adm-row"><span class="n">1</span><span class="t"><b>반별 선택 명단 올리기</b>
-          <span>「이름」 열이 있는 시트 · 여러 파일 선택 가능</span></span>
-          <button class="mini" id="r-pick">파일 선택</button></div>
+          <span>「이름」 열이 있는 시트 · 한 번에 여러 파일을 골라도, 한 파일씩 차례로 골라도 됩니다 — 고른 파일이 아래에 쌓입니다</span>
+          <div id="r-files" class="adm-files"></div></span>
+          <button class="mini" id="r-pick">파일 추가</button></div>
         <div class="adm-row"><span class="n">2</span><span class="t"><b>학생부 명단으로 반·번호 맞추기</b> <span class="wn">(권장)</span>
           <span id="r-roster">학생부성적표를 고르면 이름으로 짝을 맞춰 반·번호를 학생부 기준으로 바꾸고, 학생부에 없는 학생(자퇴·전학)은 뺍니다. 이 파일도 서버로 가지 않습니다.</span></span>
           <button class="mini" id="r-roster-pick">파일 선택</button></div>
@@ -727,7 +735,29 @@ function screenAdmin(status, msg) {
    교사 화면은 반·번호로 학생부와 짝을 맞추므로, 여기서 학생부 명단을 같이 고르면
    이름으로 짝을 맞춰 반·번호를 학생부 기준으로 바꾸고 학생부에 없는 학생은 뺍니다. 두 파일 모두 서버로 가지 않습니다. */
 let pendingChoice = null, choiceRaw = null, rosterAdm = null;
+let choiceFiles = [];   // [{ name, parts }] — 고른 순서대로 쌓이고, 같은 학기를 다시 고르면 그 학기만 바뀝니다
 const nmKey = s => String(s || '').replace(/\s+/g, '');
+const semKo = k => String(k).replace(/^(\d)-(\d)$/, '$1학년 $2학기');
+
+/* 어떤 학기가 들어왔고 어떤 학기가 비었는지를 파일 목록으로 보여 줍니다.
+   「두 개 올렸는데 하나만 잡힌 건가」를 여기서 바로 알 수 있게. */
+function renderChoiceFiles() {
+  const box = $('r-files'); if (!box) return;
+  if (!choiceFiles.length) { box.innerHTML = ''; return; }
+  const have = new Set(choiceFiles.flatMap(f => f.parts.map(p => p.sem)));
+  const grade = [...have][0]?.[0] || '2';
+  const want = [`${grade}-1`, `${grade}-2`];
+  const rows = choiceFiles.map((f, i) => `<div class="af"><span class="ok">✓</span><b>${esc(f.name)}</b>
+      <span>${f.parts.map(p => `${semKo(p.sem)} ${p.n}명`).join(' · ')}</span><button class="x" data-i="${i}" title="목록에서 빼기">×</button></div>`).join('');
+  const chips = want.map(k => have.has(k) ? `<span class="sc on">${semKo(k)} ✓</span>` : `<span class="sc">${semKo(k)} 아직 없음</span>`).join('');
+  box.innerHTML = rows + `<div class="af-sum">${chips}${have.size < 2 ? '<i>학기 파일이 하나뿐입니다. 나머지 학기 파일도 「파일 추가」로 올려 주세요.</i>' : ''}</div>`;
+  box.querySelectorAll('.x').forEach(b => b.addEventListener('click', () => {
+    choiceFiles.splice(+b.dataset.i, 1);
+    choiceRaw = choiceFiles.flatMap(f => f.parts);
+    renderChoiceFiles();
+    if (choiceRaw.length) buildPendingChoice(); else { pendingChoice = null; $('r-parsed').textContent = '파일을 올리면 인원과 학기를 확인합니다'; $('r-send').disabled = true; }
+  }));
+}
 
 function buildPendingChoice() {
   if (!choiceRaw) return;
@@ -765,13 +795,17 @@ function buildPendingChoice() {
 async function pickChoiceAdm(files) {
   $('r-parsed').textContent = `${files.map(f => f.name).join(', ')} 읽는 중…`;
   try {
-    const parts = [];
     for (const f of files) {
       const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
-      parts.push(...parseSubjectChoice(wb, XLSX, f.name));
+      const parts = parseSubjectChoice(wb, XLSX, f.name);
+      if (!parts.length) throw new Error(`${f.name} — 「이름」 열이 있는 시트를 찾지 못했습니다.`);
+      /* 같은 학기를 다시 고르면 예전 파일을 밀어냅니다. 다른 학기면 옆에 쌓입니다. */
+      const sems = new Set(parts.map(p => p.sem));
+      choiceFiles = choiceFiles.filter(x => !x.parts.some(p => sems.has(p.sem)));
+      choiceFiles.push({ name: f.name, parts });
     }
-    if (!parts.length) throw new Error('「이름」 열이 있는 시트를 찾지 못했습니다.');
-    choiceRaw = parts;
+    choiceRaw = choiceFiles.flatMap(f => f.parts);
+    renderChoiceFiles();
     buildPendingChoice();
   } catch (e) {
     $('r-parsed').innerHTML = `<span style="color:#ff9c9c">읽지 못했습니다 — ${esc(e.message)}</span>`;
@@ -798,6 +832,7 @@ async function sendChoiceAdm() {
   try {
     const res = await api.uploadData(S.admin, pendingChoice, (i, n) => { $('r-parsed').textContent = `보내는 중 ${i}/${n}`; }, 'choice');
     await store.del(store.KEY_CHOICE_SRV);
+    choiceFiles = []; choiceRaw = null; pendingChoice = null; rosterAdm = null;
     screenAdmin(await api.adminStatus(S.admin).catch(() => null), `학년별 선택 결과 반영이 끝났습니다. ${esc(res.요약 || '')}`);
   } catch (e) {
     $('r-parsed').innerHTML = `<span style="color:#ff9c9c">${esc(e.message)}</span>`;
@@ -1061,7 +1096,7 @@ async function loadChoiceSrv(serverVersion) {
     S.choiceSrv = d;
     await buildChoice();
     if (!$('app').classList.contains('hidden')) {
-      $('m-sel').textContent = S.choice ? `${S.choice.meta.n}명 반영` : '1·2학년';
+      $('m-sel').textContent = choiceLabel(S.choice);
       if (S.mode === 'sel') { fillSelStudents(); selPaint(); }
     }
   };
@@ -1084,7 +1119,7 @@ async function loadSel(serverVersion) {
     await buildChoice();
     if (!$('app').classList.contains('hidden')) {
       $('c-mode-sel').classList.remove('hidden');
-      $('m-sel').textContent = S.choice ? `${S.choice.meta.n}명 반영` : '1·2학년';
+      $('m-sel').textContent = choiceLabel(S.choice);
       if (S.mode === 'sel') { fillSelStudents(); selPaint(); }
     }
   };
