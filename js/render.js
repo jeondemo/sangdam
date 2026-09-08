@@ -39,7 +39,9 @@ const minTag = a => {
 
 /* 예비번호는 호명 여부와 상관없이 결과 배지 앞에 둡니다.
    그래야 「예비43 추합」과 「예비12 불합」이 같은 자리에서 비교됩니다. */
-const waitTag = a => (a.wait ? `<span class="tag t-cand">예비${esc(a.wait)}</span>` : '');
+const waitTag = a => (a.wait ? `<span class="tag t-cand">예비${esc(a.wait)}</span>`
+  /* 추합인데 원본에 예비번호가 비어 있으면 빈자리로 두지 않고 「미기재」로 드러냅니다 — 없는 번호를 지어내지는 않습니다. */
+  : (a.res === '추합' ? '<span class="tag t-cand dim" title="원본 자료의 예비번호 칸이 비어 있습니다">예비 미기재</span>' : ''));
 
 const appRow = a => `<div class="app${isPass({ a }) ? ' pass' : ''}">
   <span class="tk">${esc(a.ph === 1 ? (a.grp || '정시') : (a.track || ''))}</span>
