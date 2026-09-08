@@ -157,12 +157,20 @@ function doGet(e) {
 
 function 데이터읽기() { return 시트읽기(SHEET_데이터); }
 
+/* 조각이 「=」로 시작하면 시트가 수식으로 해석해 깨집니다. 저장할 때 앞에 「#」을 붙이고 읽을 때 뗍니다.
+   예전에 저장된(「#」 없는) 조각도 그대로 읽힙니다 — JSON 은 「#」으로 시작하지 않으니 구분됩니다. */
+function 조각담기(text) { return '#' + text; }
+function 조각풀기(v) {
+  var t = (v === null || v === undefined) ? '' : String(v);
+  return t.charAt(0) === '#' ? t.slice(1) : t;
+}
+
 function 시트읽기(이름) {
   var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(이름);
   if (!sh || sh.getLastRow() === 0) return '';
   var rows = sh.getRange(1, 1, sh.getLastRow(), 1).getValues();
   var out = [];
-  for (var i = 0; i < rows.length; i++) out.push(rows[i][0]);
+  for (var i = 0; i < rows.length; i++) out.push(조각풀기(rows[i][0]));
   return out.join('');
 }
 
@@ -199,7 +207,7 @@ function doPost(e) {
     }
 
     if (body.action === 'chunk') {
-      임시.getRange(body.seq + 1, 1).setValue(body.data);
+      임시.getRange(body.seq + 1, 1).setValue(조각담기(body.data));
       return 응답({ ok: true, seq: body.seq });
     }
 
@@ -209,7 +217,7 @@ function doPost(e) {
 
       var rows = 임시.getRange(1, 1, n, 1).getValues();
       var parts = [];
-      for (var i = 0; i < rows.length; i++) parts.push(rows[i][0]);
+      for (var i = 0; i < rows.length; i++) parts.push(조각풀기(rows[i][0]));
       var text = parts.join('');
 
       // 온전한 자료인지 확인한 뒤에만 교체합니다.
@@ -219,46 +227,46 @@ function doPost(e) {
 
       var 대상이름 = body.kind === 'cut' ? SHEET_배치
         : (body.kind === 'sel' ? SHEET_선택 : (body.kind === 'jg' ? SHEET_정시 : SHEET_데이터));
+
+      /* 요약은 시트를 지우기 전에 다 만들어 둡니다 — 여기서 실패하면 옛 자료가 그대로 남습니다. */
+      var m = body.meta || (parsed && parsed.meta) || {};
+      var 요약, 접두;
+      if (body.kind === 'cut') {
+        접두 = '배치';
+        요약 = (m.nUniv || 0) + '개 대학 · ' + (m.n || (parsed.rows || []).length) + '개 모집단위'
+          + (m.years && m.years.length ? ' · ' + m.years[m.years.length - 1] + '학년도' : '');
+      } else if (body.kind === 'jg') {
+        접두 = '정시';
+        요약 = (m.nUniv || 0) + '개 대학 · ' + (m.n || 0) + '개 모집단위' + (m.year ? ' · ' + m.year + '학년도' : '');
+      } else if (body.kind === 'sel') {
+        접두 = '선택';
+        요약 = (m.nField || (parsed.order || []).length) + '개 학문분야 · 권장과목 '
+          + (m.nRec || 0) + '건 · 우리 학교 ' + (m.nSub || 0) + '과목';
+      } else {
+        접두 = '';
+        요약 = (m.years ? m.years[0] + '~' + m.years[m.years.length - 1] + '학년도 · ' : '')
+          + '지원 ' + (m.nApps || (parsed.apps || []).length) + '건 · 학생 ' + (m.nPersons || (parsed.persons || []).length) + '명';
+      }
+
       var 데이터 = ss.getSheetByName(대상이름) || ss.insertSheet(대상이름).hideSheet();
       데이터.clear();
       var 조각 = [];
-      for (var p = 0; p < text.length; p += 조각크기) 조각.push([text.slice(p, p + 조각크기)]);
+      for (var p = 0; p < text.length; p += 조각크기) 조각.push([조각담기(text.slice(p, p + 조각크기))]);
       데이터.getRange(1, 1, 조각.length, 1).setValues(조각);
       임시.clear();
 
-      var m = body.meta || (parsed && parsed.meta) || {};
-      if (body.kind === 'cut') {
-        var 배치요약 = (m.nUniv || 0) + '개 대학 · ' + (m.n || (parsed.rows || []).length) + '개 모집단위'
-          + (m.years && m.years.length ? ' · ' + m.years[m.years.length - 1] + '학년도' : '');
-        값쓰기('배치버전', String(Date.now()));
-        값쓰기('배치갱신', Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'));
-        값쓰기('배치요약', 배치요약);
-        return 응답({ ok: true, 요약: 배치요약 });
+      /* 자료를 다 쓴 직후에 버전을 올립니다. 그래야 교사 화면이 새 자료와 새 버전을 같이 받습니다. */
+      var 지금 = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm');
+      if (접두) {
+        값쓰기(접두 + '버전', String(Date.now()));
+        값쓰기(접두 + '갱신', 지금);
+        값쓰기(접두 + '요약', 요약);
+        if (body.kind === 'jg') 값쓰기('정시SHA', String(body.sha || ''));   // 같은 파일을 두 번 받지 않으려고 남깁니다
+      } else {
+        값쓰기('버전', String(Date.now()));
+        값쓰기('최종갱신', 지금);
+        값쓰기('자료요약', 요약);
       }
-      if (body.kind === 'jg') {
-        var 정시요약 = (m.nUniv || 0) + '개 대학 · ' + (m.n || 0) + '개 모집단위'
-          + (m.year ? ' · ' + m.year + '학년도' : '');
-        값쓰기('정시버전', String(Date.now()));
-        값쓰기('정시갱신', Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'));
-        값쓰기('정시요약', 정시요약);
-        값쓰기('정시SHA', String(body.sha || ''));   // 같은 파일을 두 번 받지 않으려고 남깁니다
-        return 응답({ ok: true, 요약: 정시요약 });
-      }
-      if (body.kind === 'sel') {
-        var 선택요약 = (m.nField || (parsed.order || []).length) + '개 학문분야 · 권장과목 '
-          + (m.nRec || 0) + '건 · 우리 학교 ' + (m.nSub || 0) + '과목';
-        값쓰기('선택버전', String(Date.now()));
-        값쓰기('선택갱신', Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'));
-        값쓰기('선택요약', 선택요약);
-        return 응답({ ok: true, 요약: 선택요약 });
-      }
-      var 요약 = (m.years ? m.years[0] + '~' + m.years[m.years.length - 1] + '학년도 · ' : '')
-        + '지원 ' + (m.nApps || parsed.apps.length) + '건 · 학생 ' + (m.nPersons || parsed.persons.length) + '명';
-
-      값쓰기('버전', String(Date.now()));
-      값쓰기('최종갱신', Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd HH:mm'));
-      값쓰기('자료요약', 요약);
-
       return 응답({ ok: true, 요약: 요약 });
     }
 

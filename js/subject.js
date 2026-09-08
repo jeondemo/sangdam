@@ -58,13 +58,16 @@ export function summaryOf(f, sel) {
   };
 }
 
-/* 과목 → 「2-1 B그룹[택3]」 */
+/* 「2-1」 → 「2학년 1학기」. 화면에 나가는 학기 표기는 전부 이 함수를 거칩니다. */
+export const semLabel = k => { const m = /^(\d)-(\d)$/.exec(String(k || '')); return m ? `${m[1]}학년 ${m[2]}학기` : String(k || ''); };
+
+/* 과목 → 「2학년 1학기 B그룹[택3]」 */
 export function whereOf(sel) {
   const m = {};
   for (const g of sel.school.groups)
     for (const s of g.subs.concat(g.only2 || []))
-      if (!m[s]) m[s] = `${g.sem} ${g.g}그룹[택${g.pick}]`;
-  for (const c of sel.school.common) if (!m[c.s]) m[c.s] = `${c.sem} 공통`;
+      if (!m[s]) m[s] = `${semLabel(g.sem)} ${g.g}그룹[택${g.pick}]`;
+  for (const c of sel.school.common) if (!m[c.s]) m[c.s] = `${semLabel(c.sem)} 공통`;
   return m;
 }
 
@@ -121,14 +124,14 @@ export function offeredOf(sel) {
   const put = (s, where) => { if (!names.has(sq(s))) names.set(sq(s), where); };
   for (const g of sel.school.groups)
     for (const s of g.subs.concat(g.only2 || [])) {
-      put(s, `${g.sem} ${g.g}`);
+      put(s, `${semLabel(g.sem)} ${g.g}그룹`);
       if (sel.school.area[s]) areas.add(sq(sel.school.area[s]));
     }
   for (const e of sel.school.extra) {
     put(e.s, '공동교육과정');
     if (sel.school.area[e.s]) areas.add(sq(sel.school.area[e.s]));
   }
-  for (const c of sel.school.common) put(c.s, `${c.sem} 공통`);
+  for (const c of sel.school.common) put(c.s, `${semLabel(c.sem)} 공통`);
   return { names, areas };
 }
 

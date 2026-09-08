@@ -49,6 +49,7 @@ export async function clearAll() {
   await del(KEY_ROSTER);
   await del(KEY_MOCK);
   await del(KEY_CUT);
+  await del(KEY_JG);
   await del(KEY_SEL);
   await del(KEY_CHOICE);
   await del(KEY_LINK);

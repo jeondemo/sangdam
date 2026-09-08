@@ -29,14 +29,17 @@ export function findSimilar(index, opts) {
     const g = p.g?.[3];
     if (g == null) continue;
     const idxs = index.byPerson.get(p.pk) || [];
-    if (gy >= 0 && !idxs.some(i => index.apps[i].gy === gy)) continue;
+    /* 화면에 실제로 보일 기록(전문대 제외 · 계열 일치)이 하나도 없는 졸업생은 자리를 차지하지 않게 뺍니다. */
+    const shown = i => (includeVocational || index.apps[i].cat !== 1) && (gy < 0 || index.apps[i].gy === gy);
+    if (!idxs.some(shown)) continue;
     let d = Math.abs(g - gpa);
     if (myCsatAvg != null) {
       d += p.csatAvg != null ? CSAT_WEIGHT * Math.abs(p.csatAvg - myCsatAvg) : NO_CSAT_PENALTY;
     }
     cand.push({ p, d, g });
   }
-  cand.sort((a, b) => a.d - b.d);
+  /* 거리가 같으면 최근 학년도를 먼저 — 오래된 자료가 우연히 앞서지 않도록. */
+  cand.sort((a, b) => a.d - b.d || b.p.y - a.p.y);
   const sel = cand.slice(0, topN);
 
   const rows = [];
@@ -149,7 +152,7 @@ const ENG_WEIGHT = 3;   // 영어 1등급 차이를 백분위 3점 차이로 칩
 
 function pctAvgOf(c) {
   if (!c) return null;
-  const v = [c.pk, c.pm, c.ps1, c.ps2].filter(x => x != null);
+  const v = [c.pk, c.pm, c.ps1, c.ps2].filter(x => x != null && x > 0);   // 0은 미응시
   return v.length >= 3 ? v.reduce((s, x) => s + x, 0) / v.length : null;
 }
 
@@ -162,17 +165,17 @@ export function findSimilarJeongsi(index, opts) {
     const c = p.csat;
     if (!c) continue;
     const theirs = [c.pk, c.pm, c.ps1, c.ps2];
-    const pairs = mine.map((v, i) => [v, theirs[i]]).filter(([a, b]) => a != null && b != null);
+    const pairs = mine.map((v, i) => [v, theirs[i]]).filter(([a, b]) => a != null && b != null && b > 0);
     if (pairs.length < 3) continue;
     const idxs = index.byPerson.get(p.pk) || [];
-    const jg = idxs.filter(i => index.apps[i].ph === 1);
+    const jg = idxs.filter(i => index.apps[i].ph === 1
+      && (includeVocational || index.apps[i].cat !== 1) && (gy < 0 || index.apps[i].gy === gy));
     if (!jg.length) continue;
-    if (gy >= 0 && !jg.some(i => index.apps[i].gy === gy)) continue;
     let d = pairs.reduce((s, [a, b]) => s + Math.abs(a - b), 0) / pairs.length;
     if (eng != null && c.e != null) d += ENG_WEIGHT * Math.abs(eng - c.e);
     cand.push({ p, d, g: pctAvgOf(c) });
   }
-  cand.sort((a, b) => a.d - b.d);
+  cand.sort((a, b) => a.d - b.d || b.p.y - a.p.y);
   const sel = cand.slice(0, topN);
 
   const rows = [];
@@ -254,7 +257,9 @@ export function studentPct3(pct) {
   return parts.length >= 2 ? parts.reduce((a, b) => a + b, 0) / parts.length : null;
 }
 
-function judgeByDiff(d, t) {
+function judgeByDiff(d0, t) {
+  /* 2.4 − 2.0 = 0.3999… 같은 부동소수 찌꺼기가 경계에서 한 단계 내리지 않도록 소수 둘째 자리로 맞춥니다. */
+  const d = Math.round(d0 * 100) / 100;
   if (d >= t[0]) return 0;
   if (d >= t[1]) return 1;
   if (d >= t[2]) return 2;

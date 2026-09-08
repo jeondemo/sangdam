@@ -2,7 +2,7 @@
 
 import { isPass, JUDGE } from './match.js';
 import { TIER_NAME, TIER_RANK, mergeSub, feasible, summaryOf, whereOf,
-  sciProgress, isSci, overCore, groupsFor, univKey } from './subject.js';
+  sciProgress, isSci, overCore, groupsFor, univKey, semLabel } from './subject.js';
 
 /* 학급 코드는 306처럼 「학년+반」 세 자리입니다. 화면에는 「3학년 6반」으로 풉니다. */
 export const clsLabel = c => (c >= 100 ? `${Math.floor(c / 100)}학년 ${c % 100}반` : `${c}반`);
@@ -41,7 +41,7 @@ const minTag = a => {
    그래야 「예비43 추합」과 「예비12 불합」이 같은 자리에서 비교됩니다. */
 const waitTag = a => (a.wait ? `<span class="tag t-cand">예비${esc(a.wait)}</span>` : '');
 
-const appRow = a => `<div class="app">
+const appRow = a => `<div class="app${isPass({ a }) ? ' pass' : ''}">
   <span class="tk">${esc(a.ph === 1 ? (a.grp || '정시') : (a.track || ''))}</span>
   <span class="nm"><span class="un">${esc(a.univ)}</span><span class="dp">${esc(a.dept || '')}</span></span>
   <span class="rt">${minTag(a)}${waitTag(a)}${resTag(a)}</span></div>`;
@@ -77,8 +77,10 @@ export function gpaSubs(st, meta) {
     <div class="cbv many">${SUBI.map((j, i) => cell(SUBN[i], st.s[j])).join('')}</div>`;
 }
 
-export function studentCard(st, total) {
+export function studentCard(st, total, meta) {
   const g = st.g;
+  /* 1·2학년 성적표(5등급 세대)의 학년별·전교과 값은 9등급 환산이라, 학생부에 적힌 5등급과 다릅니다. 표시해 둡니다. */
+  const conv = meta?.has5 ? '<div class="fine">학년별·전교과는 9등급 환산 — 학생부의 5등급은 아래 칸에 따로 나옵니다.</div>' : '';
   const d = (g[2] != null && g[0] != null) ? g[2] - g[0] : null;
   const trend = d == null ? ''
     : d < -0.15 ? `<span class="up">1학년 대비 ${Math.abs(d).toFixed(2)} 상승</span>`
@@ -89,7 +91,7 @@ export function studentCard(st, total) {
     <div class="trend">
       ${[0, 1, 2].map(i => `<div><span>${i + 1}학년</span><b>${g[i] != null ? g[i].toFixed(2) : '—'}</b></div>`).join('')}
       <div class="cur"><span>전교과</span><b>${g[3].toFixed(2)}</b></div>
-    </div>`;
+    </div>${conv}`;
   /* 교과별 등급은 바로 아래 「내신 전교과」 칸 옆에 나오므로 여기서는 뺍니다. */
 }
 
@@ -145,15 +147,26 @@ const outTag = c => (c.won.length
 
 const ZOOM = '<span class="zoom">크게 보기</span>';
 
+/* 결과 필터 줄 — 탭 아래, 첫 카드 위. 학생 단위로 「합격 있음 / 전부 불합」을 거르고,
+   「합격 줄만 보기」는 카드 안의 불합 줄을 접습니다. 실제 걸러내기는 main.js 가 상태를 들고 합니다. */
+export function caseFilterBar(cases) {
+  const ok = cases.filter(c => c.won.length).length;
+  return `<div class="fbar"><span class="fl">결과</span>
+    <button class="fc" data-f="all" aria-pressed="true">전체<span class="c">${cases.length}</span></button>
+    <button class="fc ok" data-f="ok">합격 있음<span class="c">${ok}</span></button>
+    <button class="fc no" data-f="no">전부 불합<span class="c">${cases.length - ok}</span></button>
+    <label class="sw"><input type="checkbox" id="onlyok"> 카드 안에서 합격 줄만 보기</label></div>`;
+}
+
 export function similarStudents(cases) {
-  const html = cases.map((c, i) => `<div class="stu${c.won.length ? ' win' : ''}" data-case="${i}">
+  const html = cases.map((c, i) => `<div class="stu${c.won.length ? ' win' : ''}" data-case="${i}" data-win="${c.won.length ? 1 : 0}">
     <div class="stu-h"><span class="idx">${i + 1}</span><span class="yr">${c.p.y}</span>
       <span class="gpa">내신 ${c.p.g[3] != null ? c.p.g[3].toFixed(2) : '—'}</span>
       <span class="csat">${csatStr(c.p.csat)}</span>${outTag(c)}${ZOOM}</div>
     ${c.su.map(appRow).join('')}
     ${c.jg.length ? `<div class="app sep"><span class="tk brand">정시</span><span class="mut">${c.jg.length}건</span></div>` + c.jg.map(appRow).join('') : ''}
   </div>`).join('');
-  return html ? `<div class="stugrid">${html}</div>` : '<div class="empty">표시할 지원 기록이 없습니다.</div>';
+  return html ? caseFilterBar(cases) + `<div class="stugrid">${html}</div>` : '<div class="empty">표시할 지원 기록이 없습니다.</div>';
 }
 
 export function univTable(list) {
@@ -307,14 +320,14 @@ const jgDetail = c => {
 export function jeongsiStudents(cases) {
   const html = cases.map((c, i) => {
     const pa = pctAvgOf(c.p.csat);
-    return `<div class="stu${c.won.length ? ' win' : ''}" data-case="${i}">
+    return `<div class="stu${c.won.length ? ' win' : ''}" data-case="${i}" data-win="${c.won.length ? 1 : 0}">
       <div class="stu-h"><span class="idx">${i + 1}</span><span class="yr">${c.p.y}</span>
         <span class="gpa">백분위 ${pa != null ? pa.toFixed(1) : '—'}</span>
         <span class="csat">${jgDetail(c.p.csat)}</span>${outTag(c)}${ZOOM}</div>
       ${c.su.concat(c.jg).map(appRow).join('')}
     </div>`;
   }).join('');
-  return html ? `<div class="stugrid">${html}</div>` : '<div class="empty">표시할 정시 기록이 없습니다.</div>';
+  return html ? caseFilterBar(cases) + `<div class="stugrid">${html}</div>` : '<div class="empty">표시할 정시 기록이 없습니다.</div>';
 }
 
 /* ── 사례 크게 보기 ─────────────────────────────────── */
@@ -491,7 +504,7 @@ export function selPanel(sel, st) {
   const good = [], warn = [];
   const commonCore = sel.school.common.filter(c => {
     const m = mergeSub(picked, c.s); return m && (m.t === 'core' || m.t === 'rec');
-  }).map(c => `${esc(c.s)} <span class="fine">(${esc(c.sem)})</span>`);
+  }).map(c => `${esc(c.s)} <span class="fine">(${esc(semLabel(c.sem))})</span>`);
   if (commonCore.length)
     good.push(`이 분야가 핵심·권장으로 꼽은 과목 중 <b>우리 학교에서 전원이 이미 듣는 것</b> — ${commonCore.join(', ')}`);
 
@@ -510,8 +523,9 @@ export function selPanel(sel, st) {
     if (mine.length) good.push(`${nm} 2학년에 들은 과목 중 이 분야가 꼽은 것 — ${mine.map(esc).join(', ')}`);
   }
 
-  /* 묶음 카드 */
-  let cards = '';
+  /* 묶음 카드 — 학기마다 상자 하나로 모읍니다. 「2-1」은 「2학년 1학기」로 풀어 씁니다. */
+  const semName = semLabel;
+  const blocks = {};   // sem → { cards: [], pick, got }
   for (const g of G) {
     const tOf = timeOf(g.sem, g.g);
     /* 같은 과목이 학기마다 따로 있으므로 「학기|묶음|과목」으로 구분합니다. */
@@ -538,19 +552,29 @@ export function selPanel(sel, st) {
       return `<div class="slot${hit ? ' f' : ''}">${t}타임<b>${hit ? esc(hit) : '—'}</b></div>`;
     }).join('')}<div class="fine" style="flex:1 1 100%;margin-top:2px">↑ 올해 2학년 기준입니다. 내년 시간표는 아직 정해지지 않았습니다.</div></div>` : '';
     const cls = got.length === g.pick ? 'full' : (got.length > g.pick ? 'over' : '');
-    cards += `<div class="sem"><div class="sem-h"><span class="t">${esc(g.sem)}</span>
+    const B = blocks[g.sem] = blocks[g.sem] || { cards: [], pick: 0, got: 0 };
+    B.pick += g.pick; B.got += got.length;
+    B.cards.push(`<div class="sem"><div class="sem-h"><span class="t">${esc(semName(g.sem))}</span>
       <span class="g">${esc(g.g)}그룹 [택${g.pick}]</span><span class="cnt ${cls}">${got.length} / ${g.pick}</span></div>
       ${slots}${rel.map(r => r.html).join('')}
       ${irr.length ? `<div class="more" data-m="${key}">${open ? '▲ 관계없는 과목 접기' : `▼ 이 분야와 관계없는 과목 ${irr.length}개`}</div>
-        <div class="${open ? '' : 'hidden'}">${irr.map(r => r.html).join('')}</div>` : ''}</div>`;
+        <div class="${open ? '' : 'hidden'}">${irr.map(r => r.html).join('')}</div>` : ''}</div>`);
 
-    if (got.length > g.pick) warn.push(`<b>${esc(g.sem)} ${esc(g.g)}그룹</b>은 ${g.pick}개까지인데 ${got.length}개를 골랐습니다.`);
+    const gl = `<b>${esc(semName(g.sem))} ${esc(g.g)}그룹</b>`;
+    if (got.length > g.pick) warn.push(`${gl}은 ${g.pick}개까지인데 ${got.length}개를 골랐습니다.`);
     if (got.length > 1 && !feasible(tOf, got))
-      warn.push(`<b>${esc(g.sem)} ${esc(g.g)}그룹</b> — 지금 고른 ${got.map(esc).join(', ')}는 <b>올해 시간표 기준으로는 함께 들을 수 없습니다.</b>`
+      warn.push(`${gl} — 지금 고른 ${got.map(esc).join(', ')}는 <b>올해 시간표 기준으로는 함께 들을 수 없습니다.</b>`
         + ' <span class="fine">(내년 시간표는 아직 정해지지 않았습니다)</span>');
     const oc = overCore(g, picked);
-    if (oc) warn.push(`<b>${esc(g.sem)} ${esc(g.g)}그룹</b>에 핵심 과목이 ${oc.length}개인데 자리는 ${g.pick}개입니다 — ${oc.map(esc).join(', ')} 중에서 골라야 합니다.`);
+    if (oc) warn.push(`${gl}에 핵심 과목이 ${oc.length}개인데 자리는 ${g.pick}개입니다 — ${oc.map(esc).join(', ')} 중에서 골라야 합니다.`);
   }
+  const cards = Object.keys(blocks).sort().map(k => {
+    const B = blocks[k];
+    const semNo = (k.split('-')[1] || '1');
+    const state = B.got === B.pick ? ' full' : (B.got > B.pick ? ' over' : '');
+    return `<div class="semblk s${semNo}"><div class="bh"><span class="h">${esc(semName(k))}<small>묶음 ${B.cards.length}개에서 과목 ${B.pick}개를 고릅니다</small></span>
+      <span class="n${state}">고른 것 ${B.got} / ${B.pick}</span></div><div class="bd">${B.cards.join('')}</div></div>`;
+  }).join('');
 
   const sum = picked.map(f => fieldPane(f, sel, WHERE)).join('');
   const head = (picked.length > 1 && !sumOpen)
@@ -663,7 +687,7 @@ export function selUnits(res, st) {
 /* ── 정시 배치 (대학 공개 정시 결과 기반) ─────────────
    판정 옆의 합격률은 우리 학교 5개년 실제 결과로 맞춰 본 값입니다. */
 
-const JG_HIT = { 안정: 78, 적정: 76, 소신: 48, 상향: 13, 도전: 8 };
+const JG_HIT = { 안정: 78, 적정: 76, 소신: 53, 상향: 16, 도전: 6 };
 const JG_ORDER = ['안정', '적정', '소신', '상향', '도전'];
 const JG_CLS = { 안정: 'j-safe', 적정: 'j-fit', 소신: 'j-try', 상향: 'j-up', 도전: 'j-far' };
 
@@ -671,9 +695,12 @@ export function jgTable(res, opts = {}) {
   const cnt = {}; let none = 0;
   for (const r of res) { if (r.judge) cnt[r.judge] = (cnt[r.judge] || 0) + 1; else none++; }
 
-  const sign = d => (d > 0 ? '+' : '') + d.toFixed(1);
+  /* −0.04 는 「-0.0」이 아니라 「0.0」으로 — 반올림한 뒤에 부호를 정합니다. */
+  const sign = d => { const r = Math.round(d * 10) / 10; return (r > 0 ? '+' : '') + (Object.is(r, -0) ? 0 : r).toFixed(1); };
   const trendOf = r => {
-    const t = opts.trend?.[`${r.rec.u}|${r.rec.g}|${r.rec.d}`];
+    const k = r.rec;
+    /* 전형까지 맞는 추이를 먼저 찾고, 없으면 그 해 전형이 하나뿐이던 학과의 추이를 씁니다. */
+    const t = opts.trend?.[`${k.u}|${k.g}|${k.t}|${k.d}`] || opts.trend?.[`${k.u}|${k.g}|${k.d}`];
     if (!t) return '';
     return Object.keys(t).sort().map(y => {
       const v = t[y];
@@ -689,8 +716,8 @@ export function jgTable(res, opts = {}) {
       <td>${esc(k.d)}<span class="tf">${esc(k.t)}</span>${need ? `<span class="need">${esc(need)}</span>` : ''}</td>
       <td class="n">${r.mine.toFixed(1)}</td>
       <td class="n mut">${r.cut.toFixed(1)}</td>
-      <td class="n ${r.diff >= 0 ? 'ok' : 'no'}">${sign(r.diff)}</td>
-      <td class="n nw mut">${n ?? ''}명${k.comp ? ` · ${k.comp.toFixed(1)}:1` : ''}${k.wait != null ? ` · 충원 ${k.wait}` : ''}</td>
+      <td class="n ${Math.round(r.diff * 10) >= 0 ? 'ok' : 'no'}">${sign(r.diff)}</td>
+      <td class="n nw mut">${n != null ? `${n}명` : '—'}${k.comp ? ` · ${k.comp.toFixed(1)}:1` : ''}${k.wait != null ? ` · 충원 ${k.wait}` : ''}</td>
       <td class="nw trend">${trendOf(r)}</td></tr>`;
   }).join('');
 
@@ -713,6 +740,6 @@ export function jgTable(res, opts = {}) {
       <tbody>${rows}</tbody></table></div>
     <div class="note fine" id="jgnone" hidden>조건에 맞는 모집단위가 없습니다.</div>
     <div class="note fine">${opts.meta ? `${opts.meta.year}학년도 · ${opts.meta.nUniv}개 대학 ${opts.meta.n.toLocaleString()}개 모집단위` : ''}
-      ${none ? ` · 과목별 컷을 공개하지 않아 <b>판정하지 못한 곳 ${none}개</b>` : ''}
+      ${none ? ` · <b>판정하지 못한 곳 ${none}개</b> <span class="fine">(과목별 컷 미공개, 반영 비율 없음, 또는 그 대학이 반영하는 과목이 입력에 없음)</span>` : ''}
       ${opts.credit ? `<br>${esc(opts.credit)}` : ''}</div>`;
 }

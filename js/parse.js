@@ -76,10 +76,11 @@ function normMin(v) {
 
 function normGroup(v) {
   const s = clean(v) || '';
-  const m = s.match(/[가나다]/);
-  if (m) return m[0] + '군';
+  /* 「추가」의 '가'가 가군으로 읽히지 않도록 먼저 봅니다. */
   if (s.includes('추가')) return '추가';
   if (s.includes('정시1') || s.includes('정시2')) return '전문대';
+  const m = s.match(/[가나다]/);
+  if (m) return m[0] + '군';
   return null;
 }
 
@@ -128,10 +129,21 @@ const CSAT_FIELDS = {
   sk: '수능_표준점수_국', sm: '수능_표준점수_수', ss1: '수능_표준점수_탐1', ss2: '수능_표준점수_탐2',
 };
 
-const key3 = v => (v == null ? '' : v.toFixed(3));
+/* 사람 구분 — 이름이 없으므로 「학년도 + 1·2학년 내신」으로 같은 사람을 찾습니다.
+   수시 시트는 소수 2자리(3.87), 정시 시트는 3자리(3.865)로 적혀 있어 반올림·절사 두 가지로 맞춰 봅니다.
+   1·2학년이 같은 다른 학생은 수능 성적(없으면 전교과)으로 갈라 둡니다. */
+const key2 = v => (v == null ? '' : v.toFixed(2));
+const key2t = v => (v == null ? '' : (Math.floor(v * 100 + 1e-6) / 100).toFixed(2));
+const sameNum = (a, b) => a == null || b == null || Math.abs(a - b) < 0.006;
+function sameCsat(a, b) {
+  for (const k of Object.keys(b)) if (a[k] != null && b[k] != null && a[k] !== b[k]) return false;
+  return true;
+}
 
 export function parseHistory(workbook, XLSX) {
   const persons = new Map();
+  const prim = new Map();      // 학년도/1학년|2학년 → 후보 사람들
+  let seq = 0;
   const apps = [];
   const mincond = {};
   const sheetInfo = [];
@@ -164,23 +176,42 @@ export function parseHistory(workbook, XLSX) {
 
       const g = [num(at(row, G1)), num(at(row, G2)), num(at(row, G3)),
         num(at(row, G_ALL)), num(at(row, G_MS)), num(at(row, G_MN))];
-      const pk = `${year}/${key3(g[0])}|${key3(g[1])}`;
 
-      let p = persons.get(pk);
-      if (!p) {
-        p = { pk, y: year, g: null, gj: null, csat: null };
-        persons.set(pk, p);
-      }
-      if (isSusi && !p.g) p.g = g;
-      if (isJeongsi) { if (!p.gj) p.gj = g; if (!p.g) p.g = g; }
-
+      /* 수능 — 등급·백분위·표준점수는 0이 나올 수 없으므로 0은 미응시(빈칸)로 봅니다. */
       const csat = {};
       let hasCsat = false;
       for (const [k, colName] of Object.entries(CSAT_FIELDS)) {
-        const v = num(at(row, colName));
+        let v = num(at(row, colName));
+        if (v === 0) v = null;
         csat[k] = v;
         if (v != null) hasCsat = true;
       }
+
+      const prims = [...new Set([
+        `${year}/${key2(g[0])}|${key2(g[1])}`, `${year}/${key2t(g[0])}|${key2(g[1])}`,
+        `${year}/${key2(g[0])}|${key2t(g[1])}`, `${year}/${key2t(g[0])}|${key2t(g[1])}`,
+      ])];
+      /* 같은 시트(수시끼리·정시끼리)에서는 전교과까지 같아야 같은 사람입니다.
+         수시 시트와 정시 시트는 3학년 반영 범위가 달라 전교과가 다를 수 있으므로 서로 비교하지 않습니다. */
+      let p = null;
+      for (const k of prims) {
+        for (const cand of prim.get(k) || []) {
+          if (hasCsat && cand.csat && !sameCsat(cand.csat, csat)) continue;
+          const same = isSusi ? cand.gs : cand.gj;
+          if (same && !sameNum(same[3], g[3])) continue;
+          p = cand; break;
+        }
+        if (p) break;
+      }
+      if (!p) {
+        p = { pk: `${prims[0]}#${seq++}`, y: year, g: null, gj: null, gs: null, csat: null };
+        persons.set(p.pk, p);
+        for (const k of prims) { if (!prim.has(k)) prim.set(k, []); prim.get(k).push(p); }
+      }
+      const pk = p.pk;
+      if (isSusi) { if (!p.gs) p.gs = g; if (!p.g) p.g = g; }
+      if (isJeongsi) { if (!p.gj) p.gj = g; if (!p.g) p.g = g; }
+
       if (hasCsat) {
         if (!p.csat) p.csat = csat;
         else for (const k of Object.keys(csat)) if (p.csat[k] == null && csat[k] != null) p.csat[k] = csat[k];
@@ -265,6 +296,7 @@ function findRosterCols(rows) {
     en: pick('영', null), so: pick('사', null), sc: pick('과', null),
   };
   for (const k of Object.keys(c)) if (c[k] < 0 && ROSTER_FALLBACK[k] != null) c[k] = ROSTER_FALLBACK[k];
+  c.ko5 = pick('국', null, '5등급');
   c.combo = {};
   for (const n of ROSTER_COMBO) {
     const i9 = pick(n, null, '9등급'), i5 = pick(n, null, '5등급');
@@ -273,12 +305,38 @@ function findRosterCols(rows) {
   return c;
 }
 
+/* 3학년(9등급 세대) 성적표는 머리글만 2학년과 같은 「5등급/9등급」 쌍 템플릿이고,
+   실제 내용은 국·수·영·사·과·수과·국수영·국수영사·국수영과·국수영사과 9등급 열 열 개가
+   「국 5등급」 자리부터 차례로 들어 있습니다. 머리글을 믿으면 국 자리에 수학이 들어가므로
+   내용을 보고 판별합니다: 「5등급」 칸에 5보다 큰 값이 있거나, 5등급 전교과·묶음 교과가 전부 비었으면 이 배치입니다. */
+function detectSingle9(rows, c) {
+  if (c.ko5 < 0) return false;
+  let ko5Has = false, over5 = false, any5 = false, anyCombo = false;
+  for (let r = 5; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const v = num(row[c.ko5]);
+    if (v != null) { ko5Has = true; if (v > 5.01) over5 = true; }
+    if (c.all5 >= 0 && num(row[c.all5]) != null) any5 = true;
+    for (const ix of Object.values(c.combo)) if ((ix.g9 >= 0 && num(row[ix.g9]) != null) || (ix.g5 >= 0 && num(row[ix.g5]) != null)) anyCombo = true;
+  }
+  return over5 || (ko5Has && !any5 && !anyCombo);
+}
+
+function applySingle9(c) {
+  const s = c.ko5;
+  const out = { ...c, ko: s, ma: s + 1, en: s + 2, so: s + 3, sc: s + 4, all5: -1, single9: true, combo: {} };
+  [['수과', 5], ['국수영', 6], ['국수영사', 7], ['국수영과', 8], ['국수영사과', 9]]
+    .forEach(([n, k]) => { out.combo[n] = { g9: s + k, g5: -1 }; });
+  return out;
+}
+
 export function parseRoster(workbook, XLSX) {
   const name = workbook.SheetNames.includes('analysis') ? 'analysis' : workbook.SheetNames[0];
   const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], {
     header: 1, raw: true, defval: null, blankrows: true,
   });
-  const c = findRosterCols(rows);
+  let c = findRosterCols(rows);
+  if (detectSingle9(rows, c)) c = applySingle9(c);
   const out = [];
   for (let r = 5; r < rows.length; r++) {
     const row = rows[r] || [];
@@ -299,7 +357,9 @@ export function parseRoster(workbook, XLSX) {
   out.sort((a, b) => (a.c - b.c) || (a.no - b.no));
   /* 묶음 교과는 전원이 비어 있는 경우가 흔합니다. 실제로 값이 있는 것만 남깁니다. */
   const combos = ROSTER_COMBO.filter(n => out.some(s2 => s2.cb[n]));
-  return { students: out, meta: { n: out.length, combos, loadedAt: Date.now() } };
+  /* 5등급 값이 하나라도 있으면 5등급 세대(1·2학년) 성적표입니다. 화면 라벨에 씁니다. */
+  const has5 = out.some(s2 => s2.a5 != null);
+  return { students: out, meta: { n: out.length, combos, has5, layout: c.single9 ? 'single9' : 'pair', loadedAt: Date.now() } };
 }
 
 /* ── 학년별 반영 비중 역산 ───────────────────────────── */
@@ -446,6 +506,10 @@ export function parseCutTable(workbook, XLSX) {
         pct50: num(g('pct50')), pct70: num(g('pct70')), pctKo: num(g('pctKo')), pctMa: num(g('pctMa')), pctInq: num(g('pctInq')),
         gradeAvg: num(g('gradeAvg')), metric: clean(g('metric')) || '', note: clean(g('note')) || '', src: clean(g('src')) || '',
       };
+      /* 지표 칸에 한글로 적어도 알아듣게 — 「등급」「평균」「70%컷」「우리 학교」. 모르는 값은 비운 것과 같이 다룹니다. */
+      const M = { '등급': 'grade', '평균': 'pctAvg', '70%컷': 'pct70', '70%': 'pct70', '우리학교': 'school', '우리 학교': 'school', '환산': 'conv' };
+      if (row.metric && M[row.metric.replace(/\s+/g, '')]) row.metric = M[row.metric.replace(/\s+/g, '')];
+      if (!['pct70', 'pctAvg', 'minmax', 'grade', 'school', 'conv', 'none'].includes(row.metric)) row.metric = '';
       if (!row.metric) row.metric = row.pct70 != null ? 'pct70' : row.pct50 != null ? 'pctAvg' : row.gradeAvg != null ? 'grade' : row.conv70 != null ? 'conv' : 'none';
       row.gy = gyeyeol(dept);
       rows.push(row);
@@ -762,13 +826,20 @@ export function parseJeongsiFile(workbook, XLSX) {
 
   const latest = ys[0];
   const units = years[latest];
-  /* 지난 학년도는 컷 추이만 남깁니다 — 판정에는 최신 학년도를 씁니다. */
-  const key = r => `${r.u}|${r.g}|${r.d}`;
+  units.forEach(r => { r.y = latest; });
+  /* 지난 학년도는 컷 추이만 남깁니다 — 판정에는 최신 학년도를 씁니다.
+     같은 대학·군·학과에 전형이 여럿(일반·지역균형·농어촌…)이라 전형까지 맞춰야 다른 전형의 컷이 섞이지 않습니다.
+     전형명이 해마다 바뀌는 경우를 위해, 그 해에 전형이 하나뿐인 학과는 전형 없는 키로도 넣어 둡니다. */
+  const key4 = r => `${r.u}|${r.g}|${r.t}|${r.d}`;
+  const key3 = r => `${r.u}|${r.g}|${r.d}`;
   const trend = {};
   for (const y of ys.slice(1)) {
+    const nT = {};
+    for (const r of years[y]) { const k = key3(r); (nT[k] = nT[k] || new Set()).add(r.t); }
     for (const r of years[y]) {
-      const k = key(r);
-      (trend[k] = trend[k] || {})[y] = { c: r.cut70, f: r.full, n: r.n, r: r.comp, w: r.wait };
+      const v = { c: r.cut70, f: r.full, n: r.n, r: r.comp, w: r.wait };
+      (trend[key4(r)] = trend[key4(r)] || {})[y] = v;
+      if (nT[key3(r)].size === 1) (trend[key3(r)] = trend[key3(r)] || {})[y] = v;
     }
   }
   return {

@@ -652,3 +652,46 @@ table.jgtbl td.b{font-weight:700}
   border:1px solid var(--line);border-radius:5px;padding:1px 6px;margin-right:3px;
   font-variant-numeric:tabular-nums}
 .tr i{font-style:normal;color:var(--faint);margin-right:4px}
+
+/* ══ 유사 학생 — 결과 필터 ══ */
+.fbar{display:flex;align-items:center;gap:6px;margin:-4px 0 12px;flex-wrap:wrap}
+.fbar .fl{font-size:11.5px;font-weight:800;color:#7c8a9c;letter-spacing:.5px;margin-right:2px}
+.fbar .fc{border:1px solid var(--line);background:var(--card);color:var(--sub);border-radius:99px;
+  padding:6px 13px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.fbar .fc .c{font-weight:500;opacity:.7;margin-left:5px;font-size:11px}
+.fbar .fc:hover{border-color:var(--accent);color:var(--accent)}
+.fbar .fc[aria-pressed=true]{background:#1c2733;border-color:#1c2733;color:#fff}
+.fbar .fc.ok[aria-pressed=true]{background:var(--pass);border-color:var(--pass)}
+.fbar .fc.no[aria-pressed=true]{background:#7c8a9c;border-color:#7c8a9c}
+.fbar .sw{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);cursor:pointer;user-select:none}
+.fbar .sw input{accent-color:var(--pass)}
+.stugrid.only-ok .stu .app:not(.sep):not(.pass){display:none}
+.stu.hidden{display:none}
+
+/* ══ 과목 선택 — 학기 상자 ══ */
+.sems{display:block}
+.semblk{border:2px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:26px;background:#fff}
+.semblk .bh{display:flex;align-items:center;gap:12px;padding:12px 18px;color:#fff}
+.semblk .bh .h{font-size:17px;font-weight:800;letter-spacing:-.2px}
+.semblk .bh .h small{font-weight:600;font-size:12px;opacity:.85;margin-left:10px}
+.semblk .bh .n{margin-left:auto;font-size:11.5px;font-weight:800;background:rgba(255,255,255,.2);padding:3px 10px;border-radius:99px;white-space:nowrap}
+.semblk .bh .n.full{background:#16a34a}
+.semblk .bh .n.over{background:var(--pass)}
+.semblk.s1 .bh{background:#1e2e68}
+.semblk.s2 .bh{background:#0f766e}
+.semblk .bd{padding:16px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+@media(max-width:1180px){.semblk .bd{grid-template-columns:1fr}}
+.semblk.s1 .bd{background:#f3f6fd}
+.semblk.s2 .bd{background:#f0faf8}
+.semblk .sem-h .t{display:none}
+.semblk .sem-h .g{font-size:13px;padding:3px 10px}
+.semblk.s2 .sem-h .g{background:#d9f2ee;color:#0f766e}
+
+/* ══ 알림 · 사이드바 보조 문구 ══ */
+#toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#1c2733;color:#fff;
+  padding:11px 18px;border-radius:10px;font-size:13px;font-weight:700;opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .2s;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+.sb-stu .fine{color:#8d9ac0;font-size:10.5px;margin-top:7px;line-height:1.5}
+.sb-scope .row .when{display:block;font-style:normal;font-size:10px;color:#8d9ac0;font-weight:500;margin-top:1px}
+.sb-scope .row .when.old{color:#dbb97f;font-weight:700}

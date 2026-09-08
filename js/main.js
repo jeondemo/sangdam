@@ -231,10 +231,17 @@ function showApp(mode) {
   if (!S.index) S.index = buildIndex(S.history);
   const m = S.history.meta;
   const gl = d => d?.meta.grade ? `${d.meta.grade}학년` : '';
+  /* 명단은 이 컴퓨터에 남아 있다가 다음 해에도 그대로 열릴 수 있습니다. 올린 날짜를 같이 보여 줍니다. */
+  const when = d => {
+    if (!d?.meta?.loadedAt) return '';
+    const t = new Date(d.meta.loadedAt);
+    const old = (Date.now() - t) > 180 * 86400e3;
+    return `<i class="when${old ? ' old' : ''}">${t.getFullYear()}.${t.getMonth() + 1}.${t.getDate()} 올림${old ? ' · 오래됨' : ''}</i>`;
+  };
   $('sb-scope').innerHTML =
     `<div class="row"><span>5개년 자료</span><b>지원 ${m.nApps.toLocaleString()}건</b></div>` +
-    (S.roster ? `<div class="row"><span>${gl(S.roster)} 학생부</span><b class="off">${S.roster.meta.n}명</b></div>` : '') +
-    (S.mock ? `<div class="row"><span>${esc(S.mock.meta.label || '모의고사')}</span><b class="off">${S.mock.meta.n}명</b></div>` : '');
+    (S.roster ? `<div class="row"><span>${gl(S.roster)} 학생부${when(S.roster)}</span><b class="off">${S.roster.meta.n}명</b></div>` : '') +
+    (S.mock ? `<div class="row"><span>${esc(S.mock.meta.label || '모의고사')}${when(S.mock)}</span><b class="off">${S.mock.meta.n}명</b></div>` : '');
   $('m-susi').textContent = S.roster ? `${gl(S.roster)} ${S.roster.meta.n}명`.trim() : '명단 없음';
   $('m-jg').textContent = S.mock ? (S.mock.meta.label || `${S.mock.meta.n}명`) : '명단 없음';
   $('c-mode-sel').classList.toggle('hidden', !S.sel);
@@ -242,11 +249,28 @@ function showApp(mode) {
   setMode(mode || S.mode);
 }
 
-function setMode(mode) {
-  S.mode = mode;
+/* 학생을 바꾸거나 목록을 바꿀 때 앞 학생의 값이 한 칸도 남지 않게 전부 비웁니다.
+   내신·수능 등급·백분위 칸이 남아 있으면 다음 학생 계산에 섞여 들어갑니다. */
+const SCORE_INPUTS = ['gpa', 'c_k', 'c_m', 'c_e', 'c_s1', 'c_s2', 'p_k', 'p_m', 'p_s1', 'p_s2', 'p_e'];
+function clearStudent() {
   S.cur = null;
+  for (const id of SCORE_INPUTS) if ($(id)) $(id).value = '';
+  if ($('gpanote')) $('gpanote').textContent = '';
   if ($('gpasubs')) $('gpasubs').innerHTML = '';
   $('gpa5c')?.classList.add('hidden');
+  $('stucard')?.classList.add('hidden');
+}
+
+function toast(msg) {
+  let t = $('toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 4000);
+}
+
+function setMode(mode) {
+  S.mode = mode;
+  clearStudent();
   document.querySelectorAll('#modechips .chip').forEach(c => c.setAttribute('aria-pressed', String(c.dataset.mode === mode)));
 
   /* 과목 선택은 성적이 아니라 편제를 다루므로 사이드바 구성이 다릅니다. */
@@ -304,19 +328,19 @@ function fillStudents() {
   const label = s => `${s.no}번 ${s.nm}`;
   $('stu').innerHTML = '<option value="">직접 입력</option>' + f.map(s => `<option value="${s.c}-${s.no}">${esc(label(s))}</option>`).join('');
   if (S.cur && f.some(s => s.c === S.cur.c && s.no === S.cur.no)) $('stu').value = `${S.cur.c}-${S.cur.no}`;
+  else if (S.cur) { clearStudent(); run(); }   // 고른 학생이 새 목록에 없으면 앞 학생 값을 남기지 않습니다
 }
+
+/* 명단의 같은 학생(학급·번호)을 다른 명단에서 찾습니다 — 학생부 학생의 모의고사 등급을 같이 채울 때 씁니다. */
+const sameStudent = (list, s) => (list || []).find(x => x.c === s.c && x.no === s.no && x.nm === s.nm) || null;
 
 function onStudentChange() {
   const v = $('stu').value;
-  if (!v) {
-    S.cur = null; $('stucard').classList.add('hidden');
-    $('gpanote').textContent = ''; $('gpasubs').innerHTML = '';
-    $('gpa5c').classList.add('hidden');
-    return;
-  }
+  clearStudent();
+  if (!v) return run();
   const [c, no] = v.split('-').map(Number);
   S.cur = currentList().find(s => s.c === c && s.no === no) || null;
-  if (!S.cur) return;
+  if (!S.cur) return run();
   if (S.mode === 'jg') {
     $('stucard').innerHTML = R.mockCard(S.cur, S.mock.meta.n);
     const p = S.cur.pct, g = S.cur.grade;
@@ -324,9 +348,14 @@ function onStudentChange() {
     $('p_s1').value = p.s1 ?? ''; $('p_s2').value = p.s2 ?? '';
     $('p_e').value = g.e ?? '';
   } else {
-    $('stucard').innerHTML = R.studentCard(S.cur, S.roster.meta.n);
+    $('stucard').innerHTML = R.studentCard(S.cur, S.roster.meta.n, S.roster.meta);
     $('gpa').value = S.cur.g[3].toFixed(2);
-    $('gpanote').textContent = '';
+    /* 모의고사 명단에 같은 학생이 있으면 수능 등급 칸을 그 학생 것으로 채웁니다. 없으면 빈칸입니다. */
+    const mk = sameStudent(S.mock?.students, S.cur);
+    if (mk?.grade) {
+      $('c_k').value = mk.grade.k ?? ''; $('c_m').value = mk.grade.m ?? ''; $('c_e').value = mk.grade.e ?? '';
+      $('c_s1').value = mk.grade.s1 ?? ''; $('c_s2').value = mk.grade.s2 ?? '';
+    }
     $('gpasubs').innerHTML = R.gpaSubs(S.cur, S.roster?.meta);
     /* 전교과 5등급은 1·2학년 성적표에만 들어 있습니다. */
     $('gpa5').textContent = S.cur.a5 != null ? S.cur.a5.toFixed(2) : '—';
@@ -390,6 +419,7 @@ function runSusi() {
   $('headline').innerHTML = R.headline(sum, sel, gpa, myAvg, S.cur?.nm);
   S.cases = R.buildCases(sel, rows, 'susi');
   $('p-stu').innerHTML = R.similarStudents(S.cases);
+  applyCaseFilter();
   const uni = aggregateUniv(sum.su);
   $('p-univ').innerHTML = R.univTable(uni);
   $('p-track').innerHTML = R.trackTable(aggregateTrack(sum.su), sum);
@@ -414,10 +444,16 @@ function runJeongsi() {
   $('headline').innerHTML = R.jeongsiHeadline(sum, sel, pct, eng, S.cur?.nm, groups, S.mock?.meta);
   S.cases = R.buildCases(sel, rows, 'jg');
   $('p-stu').innerHTML = R.jeongsiStudents(S.cases);
+  applyCaseFilter();
   const uni = aggregateJeongsiUniv(sum.jg);
   $('p-univ').innerHTML = R.jeongsiUnivTable(uni);
   $('p-track').innerHTML = R.groupTable(groups, sum);
-  const myGrade = S.cur?.grade ? (() => { const g = [S.cur.grade.k, S.cur.grade.m, S.cur.grade.s1, S.cur.grade.s2].filter(x => x != null); return g.length ? g.reduce((a, b) => a + b, 0) / g.length : null; })() : null;
+  /* 등급 평균과 한국사는 명단 학생의 성적표에서만 옵니다. 입력칸을 손으로 고쳤으면
+     그 학생 것이 아니므로 쓰지 않습니다 — 백분위에서 환산한 값으로 넘어갑니다. */
+  const untouched = S.cur?.pct && S.cur.pct.k === pct.k && S.cur.pct.m === pct.m
+    && S.cur.pct.s1 === pct.s1 && S.cur.pct.s2 === pct.s2 && (S.cur.grade?.e ?? null) === eng;
+  const myGrade = (untouched && S.cur?.grade) ? (() => { const g = [S.cur.grade.k, S.cur.grade.m, S.cur.grade.s1, S.cur.grade.s2].filter(x => x != null); return g.length ? g.reduce((a, b) => a + b, 0) / g.length : null; })() : null;
+  const his = untouched ? (S.cur?.grade?.h ?? null) : null;
   if (!S.school) S.school = schoolJeongsiStats(S.index);
   /* 배치 탭 — 정시 자료가 있으면 그쪽으로, 없으면 예전 배치기준표로. 둘 다 없으면 탭을 감춥니다. */
   const has = !!(S.jg || S.cut);
@@ -426,7 +462,7 @@ function runJeongsi() {
   if (!has && document.querySelector('.tab[data-t="jg"][aria-selected="true"]')) selectTab('stu');
   let nJg = '';
   if (S.jg) {
-    jgRes = placementJG(S.jg.units, { pct, eng, his: S.cur?.grade?.h });
+    jgRes = placementJG(S.jg.units, { pct, eng, his });
     jgFilter = '적정'; jgQ = '';
     $('p-jg').innerHTML = R.jgTable(jgRes, { trend: S.jg.trend, meta: S.jg.meta, credit: JG_CREDIT });
     filterJG();
@@ -912,10 +948,20 @@ async function loadSel(serverVersion) {
   } catch { /* 캐시가 있으면 그대로 씁니다 */ }
 }
 
+/* 관리자가 5개년 자료를 새로 올렸으면 저장만 하지 않고 지금 화면에도 바로 바꿔 끼웁니다.
+   정시·선택 자료는 즉시 바뀌는데 5개년만 다음 접속까지 옛것이면 두 자료가 어긋납니다. */
 async function refresh() {
   try {
     const res = await api.fetchData(S.key);
     await store.set(store.KEY_DATA, { enc: res.data, version: res.version });
+    S.history = decode(res.data);
+    S.version = res.version;
+    S.index = null; S.school = null;
+    if (!$('app').classList.contains('hidden')) {
+      S.index = buildIndex(S.history);
+      showApp(S.mode);
+      toast('5개년 자료가 새 버전으로 바뀌었습니다.');
+    }
   } catch { /* 다음 접속 때 다시 시도합니다 */ }
 }
 
@@ -934,7 +980,12 @@ async function boot() {
   if (!GAS_URL.includes('/exec')) { screenBlocked('config.js 에 Apps Script 주소가 아직 설정되지 않았습니다.'); return; }
 
   try { await loadHistory(); }
-  catch (e) { await store.del(store.KEY_LINK); screenBlocked(e.message); return; }
+  catch (e) {
+    /* 키가 틀린 경우만 링크를 지웁니다. 서버 응답이 잠시 손상된 것뿐이면 다음 접속에 다시 시도합니다. */
+    if (e.auth) await store.del(store.KEY_LINK);
+    screenBlocked(e.auth ? e.message : `자료를 받지 못했습니다 (${e.message}). 잠시 뒤 새로고침해 주세요.`);
+    return;
+  }
 
   S.roster = await store.get(store.KEY_ROSTER);
   S.mock = await store.get(store.KEY_MOCK);
@@ -986,11 +1037,13 @@ function caseClose() {
 }
 
 function caseGo(d) {
-  const n = caseAt + d;
+  let n = caseAt + d;
+  while (n >= 0 && n < S.cases.length && !caseVisible(n)) n += d;
   if (n < 0 || n >= S.cases.length) return;
   caseAt = n;
   casePaint();
 }
+const caseHasNext = d => { let n = caseAt + d; while (n >= 0 && n < S.cases.length && !caseVisible(n)) n += d; return n >= 0 && n < S.cases.length; };
 
 function casePaint() {
   const v = R.caseView(S.cases[caseAt], caseAt, S.cases.length);
@@ -1003,11 +1056,37 @@ function casePaint() {
   $('md-res').textContent = v.res;
   $('md-b').innerHTML = v.body;
   $('md-b').scrollTop = 0;
-  $('md-prev').disabled = caseAt === 0;
-  $('md-next').disabled = caseAt === S.cases.length - 1;
+  $('md-prev').disabled = !caseHasNext(-1);
+  $('md-next').disabled = !caseHasNext(1);
 }
 
+/* 결과 필터 — 유사 학생 탭. 선택은 세션 동안 유지되고, 학생을 바꿔 다시 그려도 그대로 적용됩니다. */
+const CF = { mode: 'all', onlyOk: false };
+function applyCaseFilter() {
+  const p = $('p-stu');
+  const bar = p.querySelector('.fbar');
+  if (!bar) return;
+  bar.querySelectorAll('.fc').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === CF.mode)));
+  p.querySelectorAll('.stu[data-case]').forEach(c => {
+    const w = c.dataset.win === '1';
+    c.classList.toggle('hidden', !(CF.mode === 'all' || (CF.mode === 'ok') === w));
+  });
+  p.querySelector('.stugrid')?.classList.toggle('only-ok', CF.onlyOk);
+  const sw = $('onlyok'); if (sw) sw.checked = CF.onlyOk;
+}
+/* 「크게 보기」 넘기기는 지금 보이는 카드 사이에서만 움직입니다. */
+const caseVisible = i => (CF.mode === 'all' || (CF.mode === 'ok') === (S.cases[i].won.length > 0));
+
 $('p-stu').addEventListener('click', e => {
+  const fc = e.target.closest('.fc[data-f]');
+  if (fc) {
+    CF.mode = fc.dataset.f;
+    if (CF.mode === 'ok') CF.onlyOk = true;      // 합격 있음을 누르면 합격 줄만 보기도 같이 켭니다
+    if (CF.mode !== 'ok') CF.onlyOk = false;
+    applyCaseFilter(); return;
+  }
+  if (e.target.id === 'onlyok') { CF.onlyOk = e.target.checked; applyCaseFilter(); return; }
+  if (e.target.closest('.sw')) return;
   const card = e.target.closest('.stu[data-case]');
   if (card) caseOpen(+card.dataset.case);
 });

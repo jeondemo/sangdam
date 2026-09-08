@@ -30,8 +30,16 @@ export async function fetchVersion(key) {
   const res = await fetch(url({ k: key, mode: 'version' }));
   if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
   const json = await res.json();
-  if (!json.ok) throw new Error(json.error || '접근 권한이 없습니다.');
+  if (!json.ok) throw authError(json.error);
   return json;
+}
+
+/* 서버가 「키가 틀리다」고 답한 것과, 네트워크·응답 손상은 다르게 다뤄야 합니다.
+   앞의 것만 링크 키를 지우는 이유가 됩니다. */
+function authError(msg) {
+  const e = new Error(msg || '접근 권한이 없습니다.');
+  e.auth = true;
+  return e;
 }
 
 /* 5개년 자료 전체 내려받기 */
@@ -40,7 +48,7 @@ export async function fetchData(key, onProgress) {
   const res = await fetch(url({ k: key }));
   if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
   const json = await res.json();
-  if (!json.ok) throw new Error(json.error || '접근 권한이 없습니다.');
+  if (!json.ok) throw authError(json.error);
   return json;
 }
 
