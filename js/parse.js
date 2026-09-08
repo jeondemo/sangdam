@@ -688,9 +688,20 @@ export function parseSubjectChoice(workbook, XLSX, filename) {
       const j = hdr.findIndex(h => h === '이름' || h === '성명');
       if (j < 0) continue;
       hi = i;
-      col = { nm: j, sid: hdr.findIndex(h => h === '학번'), cls: hdr.findIndex(h => h === '반'), no: hdr.findIndex(h => h === '번' || h === '번호') };
+      /* 학급·번호 열 — 「반/번」 또는 「신반/신번」(올해 반·번호). 「구학번」(10401 = 작년 1학년 4반 1번)은
+         올해 반·번호가 없을 때만 학번으로 씁니다. 학번·반·번호 열은 과목으로 세지 않습니다. */
+      const find = re => hdr.findIndex(h => re.test(h));
+      col = {
+        nm: j,
+        cls: find(/^(신)?반$/), no: find(/^(신)?(번|번호)$/),
+        sid: find(/^(신)?학번$/) >= 0 ? find(/^(신)?학번$/) : find(/학번$/),
+      };
       col.subs = [];
-      for (let k = j + 1; k < hdr.length; k++) if (hdr[k] && !/^(신학번|비고|합계|계)$/.test(hdr[k])) col.subs.push([k, (clean(arr[i][k]) || '').replace(/\s+/g, ' ').trim()]);
+      const NOT = /^(신학번|구학번|학번|신반|신번|반|번|번호|순번|연번|No\.?|비고|합계|계|성별|학년)$/i;
+      for (let k = 0; k < hdr.length; k++) {
+        if (k === j || k === col.cls || k === col.no || k === col.sid) continue;
+        if (hdr[k] && !NOT.test(hdr[k]) && !/학번$/.test(hdr[k])) col.subs.push([k, (clean(arr[i][k]) || '').replace(/\s+/g, ' ').trim()]);
+      }
       break;
     }
     if (hi < 0 || !col.subs.length) continue;

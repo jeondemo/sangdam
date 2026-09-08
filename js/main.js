@@ -10,7 +10,7 @@ import * as api from './api.js';
 import { encode, decode } from './codec.js';
 import {
   parseHistory, parseRoster, parseMockExam, mergeMockExam, pctAvg, examInfo, parseCutTable,
-  parseSubjectTable, parseSubjectChoice, mergeChoice, stripChoiceNames, parseJeongsiFile,
+  parseSubjectTable, parseSubjectChoice, mergeChoice, parseJeongsiFile,
 } from './parse.js';
 import {
   buildIndex, findSimilar, summarize, aggregateUniv, aggregateTrack, aggregateJeongsi, csatAvg,
@@ -698,7 +698,10 @@ function screenAdmin(status, msg) {
         <div class="adm-row"><span class="n">1</span><span class="t"><b>반별 선택 명단 올리기</b>
           <span>「이름」 열이 있는 시트 · 여러 파일 선택 가능</span></span>
           <button class="mini" id="r-pick">파일 선택</button></div>
-        <div class="adm-row"><span class="n">2</span><span class="t"><b>변환 확인</b>
+        <div class="adm-row"><span class="n">2</span><span class="t"><b>학생부 명단으로 반·번호 맞추기</b> <span class="wn">(권장)</span>
+          <span id="r-roster">학생부성적표를 고르면 이름으로 짝을 맞춰 반·번호를 학생부 기준으로 바꾸고, 학생부에 없는 학생(자퇴·전학)은 뺍니다. 이 파일도 서버로 가지 않습니다.</span></span>
+          <button class="mini" id="r-roster-pick">파일 선택</button></div>
+        <div class="adm-row"><span class="n">3</span><span class="t"><b>변환 확인</b>
           <span id="r-parsed">파일을 올리면 인원과 학기를 확인합니다</span></span>
           <button class="mini" id="r-send" disabled>시트에 반영</button></div>
       </div>
@@ -715,11 +718,49 @@ function screenAdmin(status, msg) {
   $('s-pick2').addEventListener('click', () => $('f-sel').click());
   $('s-send').addEventListener('click', sendSel);
   $('r-pick').addEventListener('click', () => $('f-choice-adm').click());
+  $('r-roster-pick').addEventListener('click', () => $('f-roster-adm').click());
   $('r-send').addEventListener('click', sendChoiceAdm);
 }
 
-/* ── 학년별 선택 결과 → 서버 (이름 제거) ───────────────── */
-let pendingChoice = null;
+/* ── 학년별 선택 결과 → 서버 (이름 제거) ─────────────────
+   선택 명단의 반·번호는 학생부 명단과 어긋날 수 있습니다(번호를 새로 매긴 뒤·전의 자료).
+   교사 화면은 반·번호로 학생부와 짝을 맞추므로, 여기서 학생부 명단을 같이 고르면
+   이름으로 짝을 맞춰 반·번호를 학생부 기준으로 바꾸고 학생부에 없는 학생은 뺍니다. 두 파일 모두 서버로 가지 않습니다. */
+let pendingChoice = null, choiceRaw = null, rosterAdm = null;
+const nmKey = s => String(s || '').replace(/\s+/g, '');
+
+function buildPendingChoice() {
+  if (!choiceRaw) return;
+  const stat = [];
+  const parts = choiceRaw.map(p => {
+    let same = 0, renum = 0, dropped = 0, ambiguous = 0;
+    const students = [];
+    for (const st of p.students) {
+      let cls = st.cls, no = st.no;
+      if (rosterAdm) {
+        const cands = rosterAdm.students.filter(r => nmKey(r.nm) === nmKey(st.nm));
+        const inCls = cands.filter(r => r.c % 100 === st.cls);
+        const hit = inCls.length === 1 ? inCls[0] : (cands.length === 1 ? cands[0] : null);
+        if (!hit) { if (cands.length) ambiguous++; else dropped++; continue; }
+        if (hit.c % 100 === st.cls && hit.no === st.no) same++; else renum++;
+        cls = hit.c % 100; no = hit.no;
+      }
+      students.push({ cls, no, picks: st.picks });     // 이름은 여기서 사라집니다
+    }
+    if (rosterAdm) stat.push(`${p.sem.replace(/^(\d)-(\d)$/, '$1학년 $2학기')} 같음 ${same}${renum ? ` · 번호 바꿈 ${renum}` : ''}${dropped ? ` · 학생부에 없어 뺌 ${dropped}` : ''}${ambiguous ? ` · 동명이인 미확정 ${ambiguous}` : ''}`);
+    return { sem: p.sem, year: p.year, sheet: p.sheet, n: students.length, students };
+  });
+  const ids = new Set(); parts.forEach(p => p.students.forEach(st => ids.add(`${st.cls}-${st.no}`)));
+  const sems = [...new Set(parts.map(p => p.sem))].sort();
+  const year = Math.max(...parts.map(p => p.year || 0)) || null;
+  pendingChoice = { parts, meta: { year, n: ids.size, sems, matched: !!rosterAdm, loadedAt: Date.now() } };
+  const semTxt = sems.map(k => k.replace(/^(\d)-(\d)$/, '$1학년 $2학기')).join(' / ');
+  const fit = rosterAdm
+    ? `<br>학생부와 맞춤 — ${stat.join(' / ')}`
+    : ' · <span style="color:#ffd27a">학생부 명단과 안 맞췄음 — 반·번호가 다르면 다른 학생에게 붙습니다</span>';
+  $('r-parsed').innerHTML = `<b style="color:#e5ebfa">${year ? year + '학년도 · ' : ''}${ids.size}명</b> · ${semTxt} · 이름 제거됨${fit}`;
+  $('r-send').disabled = false;
+}
 
 async function pickChoiceAdm(files) {
   $('r-parsed').textContent = `${files.map(f => f.name).join(', ')} 읽는 중…`;
@@ -730,16 +771,24 @@ async function pickChoiceAdm(files) {
       parts.push(...parseSubjectChoice(wb, XLSX, f.name));
     }
     if (!parts.length) throw new Error('「이름」 열이 있는 시트를 찾지 못했습니다.');
-    const safe = stripChoiceNames(parts);           // 이름은 여기서 사라집니다
-    const ids = new Set(); safe.forEach(p => p.students.forEach(st => ids.add(`${st.cls}-${st.no}`)));
-    const sems = [...new Set(safe.map(p => p.sem))].sort();
-    const year = Math.max(...safe.map(p => p.year || 0)) || null;
-    pendingChoice = { parts: safe, meta: { year, n: ids.size, sems, loadedAt: Date.now() } };
-    $('r-parsed').innerHTML = `<b style="color:#e5ebfa">${year ? year + '학년도 · ' : ''}${ids.size}명</b> · ${sems.map(k => k.replace(/^(\d)-(\d)$/, '$1학년 $2학기')).join(' / ')} · 이름 제거됨`;
-    $('r-send').disabled = false;
+    choiceRaw = parts;
+    buildPendingChoice();
   } catch (e) {
     $('r-parsed').innerHTML = `<span style="color:#ff9c9c">읽지 못했습니다 — ${esc(e.message)}</span>`;
     $('r-send').disabled = true;
+  }
+}
+
+async function pickRosterAdm(file) {
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const data = parseRoster(wb, XLSX);
+    if (!data.students.length) throw new Error('학생을 찾지 못했습니다.');
+    rosterAdm = data;
+    $('r-roster').innerHTML = `<b style="color:#e5ebfa">${esc(file.name)}</b> · ${data.students.length}명 — 이 명단의 반·번호를 기준으로 맞춥니다`;
+    buildPendingChoice();
+  } catch (e) {
+    $('r-roster').innerHTML = `<span style="color:#ff9c9c">학생부성적표를 읽지 못했습니다 — ${esc(e.message)}</span>`;
   }
 }
 
@@ -1213,6 +1262,7 @@ $('f-jg').addEventListener('change', e => { if (e.target.files[0]) pickJG(e.targ
 $('f-sel').addEventListener('change', e => { if (e.target.files[0]) pickSel(e.target.files[0]); e.target.value = ''; });
 $('f-choice').addEventListener('change', e => { if (e.target.files.length) loadChoice([...e.target.files]); e.target.value = ''; });
 $('f-choice-adm').addEventListener('change', e => { if (e.target.files.length) pickChoiceAdm([...e.target.files]); e.target.value = ''; });
+$('f-roster-adm').addEventListener('change', e => { if (e.target.files[0]) pickRosterAdm(e.target.files[0]); e.target.value = ''; });
 
 /* 과목 선택 화면의 조작 */
 $('selfbox').addEventListener('click', e => {
