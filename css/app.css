@@ -697,3 +697,31 @@ table.jgtbl td.b{font-weight:700}
 .sb-scope .row .when.old{color:#dbb97f;font-weight:700}
 
 .t-cand.dim{color:#a3aebd;border-style:dashed;background:#fafbfd}
+
+/* ══ 과목 선택 — 2학년 이수 현황 상자 ══ */
+.takenblk{border:2px solid #cbd3e1;border-radius:14px;overflow:hidden;margin-bottom:26px;background:#fff}
+.takenblk .bh{display:flex;align-items:center;gap:12px;padding:12px 18px;background:#3b4a63;color:#fff;flex-wrap:wrap}
+.takenblk.old .bh{background:#8a5a05}
+.takenblk .bh .h{font-size:17px;font-weight:800}
+.takenblk .bh .h small{font-weight:600;font-size:12px;opacity:.85;margin-left:10px}
+.takenblk .bh .n{margin-left:auto;font-size:12px;font-weight:800;background:rgba(255,255,255,.18);padding:4px 12px;border-radius:99px;white-space:nowrap}
+.takenblk .bd{padding:16px;background:#f5f6f9;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:1180px){.takenblk .bd{grid-template-columns:1fr}}
+.tk-sem{background:#fff;border:1px solid #dde3ec;border-radius:12px;overflow:hidden}
+.tk-sem .th{padding:9px 14px;font-weight:800;font-size:13px;color:#3b4a63;background:#eef1f6;border-bottom:1px solid #dde3ec;display:flex;align-items:center}
+.tk-sem .th small{margin-left:auto;font-weight:600;color:#7c8a9c;font-size:11px}
+.tk-row{display:flex;align-items:center;gap:9px;padding:8px 14px;border-top:1px solid #f0f3f7;font-size:13px}
+.tk-row .bx{width:18px;height:18px;border-radius:5px;background:#3b4a63;color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 18px}
+.tk-row b{font-weight:800}
+.tk-row i{font-style:normal;color:#7c8a9c;font-size:11px;margin-left:2px}
+.tk-row .rt{margin-left:auto;display:flex;gap:4px;align-items:center}
+.tk-row .why{font-size:11px;color:#7c8a9c;margin-right:3px}
+.tk-etc{padding:8px 14px 11px;font-size:12px;color:#7c8a9c;border-top:1px solid #f0f3f7;line-height:1.6}
+.tk-etc b{color:#5b6b7c;font-weight:700}
+.tk-prog{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:#3b4a63}
+.tk-prog .pill{border-radius:99px;padding:4px 11px;font-weight:700;border:1px solid #dde3ec;background:#fff}
+.tk-prog .pill small{font-weight:500;opacity:.7;margin-left:3px}
+.tk-prog .pill.done{background:#e8f5ee;border-color:#bfe3cf;color:#1b6e3a}
+.tk-prog .pill.todo{background:#fff7e6;border-color:#f3dba3;color:#8a5a05}
+.tk-prog .pill.miss{background:#fde8e8;border-color:#f3c9c9;color:#b42318}
+.tk-prog .lab{font-weight:800;margin-right:2px}

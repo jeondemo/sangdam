@@ -10,7 +10,7 @@ import * as api from './api.js';
 import { encode, decode } from './codec.js';
 import {
   parseHistory, parseRoster, parseMockExam, mergeMockExam, pctAvg, examInfo, parseCutTable,
-  parseSubjectTable, parseSubjectChoice, mergeChoice, parseJeongsiFile,
+  parseSubjectTable, parseSubjectChoice, mergeChoice, stripChoiceNames, parseJeongsiFile,
 } from './parse.js';
 import {
   buildIndex, findSimilar, summarize, aggregateUniv, aggregateTrack, aggregateJeongsi, csatAvg,
@@ -188,6 +188,7 @@ async function loadRoster(file) {
     Object.assign(data.meta, examInfo(file.name, data.students));
     S.roster = data;
     if (keepChecked()) await store.set(store.KEY_ROSTER, data); else await store.del(store.KEY_ROSTER);
+    if (S.choice?.meta?.src === 'server') attachNames(S.choice);
     showApp('susi');
   } catch (e) {
     screenUpload('학생부성적표를 읽지 못했습니다 — ' + e.message);
@@ -600,6 +601,7 @@ async function loadChoice(files) {
     }
     if (!parts.length) throw new Error('「이름」 열이 있는 시트를 찾지 못했습니다.');
     S.choice = mergeChoice(parts, S.sel);
+    S.choice.meta.src = 'local';
     await store.set(store.KEY_CHOICE, S.choice);
     $('m-sel').textContent = `${S.choice.meta.n}명 반영`;
     fillSelStudents();
@@ -687,6 +689,19 @@ function screenAdmin(status, msg) {
           <span id="s-parsed">파일을 올리면 분야 수를 확인합니다</span></span>
           <button class="mini" id="s-send" disabled>시트에 반영</button></div>
       </div>
+      <div class="cv-panel">
+        <div class="p-head"><span class="p-num">결</span><h2>학년별 선택 결과</h2>
+          <span class="p-tag">${esc(status?.결과요약 || '아직 없음')}</span></div>
+        <div class="p-hint">학교가 만든 <b>반별 선택 명단</b>(1학기·2학기 파일을 한꺼번에)입니다. 올리면 모든 선생님 화면의 「과목 선택」에
+          타임·인원·학생별 이수 과목이 자동으로 붙습니다.<br>
+          <b>이름은 이 브라우저에서 지우고 학급·번호·과목만 보냅니다.</b> 원본 파일은 서버로 가지 않습니다.${status?.결과갱신 ? ` 최종 갱신 ${esc(status.결과갱신)}` : ''}</div>
+        <div class="adm-row"><span class="n">1</span><span class="t"><b>반별 선택 명단 올리기</b>
+          <span>「이름」 열이 있는 시트 · 여러 파일 선택 가능</span></span>
+          <button class="mini" id="r-pick">파일 선택</button></div>
+        <div class="adm-row"><span class="n">2</span><span class="t"><b>변환 확인</b>
+          <span id="r-parsed">파일을 올리면 인원과 학기를 확인합니다</span></span>
+          <button class="mini" id="r-send" disabled>시트에 반영</button></div>
+      </div>
       ${msg ? `<div class="cv-panel"><div class="p-hint" style="color:#e5ebfa">${msg}</div></div>` : ''}
     </div>
   </div>`, [['d-gold', '관리자']]);
@@ -699,6 +714,46 @@ function screenAdmin(status, msg) {
   $('j-send').addEventListener('click', sendJG);
   $('s-pick2').addEventListener('click', () => $('f-sel').click());
   $('s-send').addEventListener('click', sendSel);
+  $('r-pick').addEventListener('click', () => $('f-choice-adm').click());
+  $('r-send').addEventListener('click', sendChoiceAdm);
+}
+
+/* ── 학년별 선택 결과 → 서버 (이름 제거) ───────────────── */
+let pendingChoice = null;
+
+async function pickChoiceAdm(files) {
+  $('r-parsed').textContent = `${files.map(f => f.name).join(', ')} 읽는 중…`;
+  try {
+    const parts = [];
+    for (const f of files) {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: 'array' });
+      parts.push(...parseSubjectChoice(wb, XLSX, f.name));
+    }
+    if (!parts.length) throw new Error('「이름」 열이 있는 시트를 찾지 못했습니다.');
+    const safe = stripChoiceNames(parts);           // 이름은 여기서 사라집니다
+    const ids = new Set(); safe.forEach(p => p.students.forEach(st => ids.add(`${st.cls}-${st.no}`)));
+    const sems = [...new Set(safe.map(p => p.sem))].sort();
+    const year = Math.max(...safe.map(p => p.year || 0)) || null;
+    pendingChoice = { parts: safe, meta: { year, n: ids.size, sems, loadedAt: Date.now() } };
+    $('r-parsed').innerHTML = `<b style="color:#e5ebfa">${year ? year + '학년도 · ' : ''}${ids.size}명</b> · ${sems.map(k => k.replace(/^(\d)-(\d)$/, '$1학년 $2학기')).join(' / ')} · 이름 제거됨`;
+    $('r-send').disabled = false;
+  } catch (e) {
+    $('r-parsed').innerHTML = `<span style="color:#ff9c9c">읽지 못했습니다 — ${esc(e.message)}</span>`;
+    $('r-send').disabled = true;
+  }
+}
+
+async function sendChoiceAdm() {
+  if (!pendingChoice) return;
+  $('r-send').disabled = true;
+  try {
+    const res = await api.uploadData(S.admin, pendingChoice, (i, n) => { $('r-parsed').textContent = `보내는 중 ${i}/${n}`; }, 'choice');
+    await store.del(store.KEY_CHOICE_SRV);
+    screenAdmin(await api.adminStatus(S.admin).catch(() => null), `학년별 선택 결과 반영이 끝났습니다. ${esc(res.요약 || '')}`);
+  } catch (e) {
+    $('r-parsed').innerHTML = `<span style="color:#ff9c9c">${esc(e.message)}</span>`;
+    $('r-send').disabled = false;
+  }
 }
 
 let pendingCut = null;
@@ -871,11 +926,12 @@ async function loadHistory() {
     await loadCut();
     await loadJG();
     await loadSel();
+    await loadChoiceSrv();
     api.fetchVersion(S.key).then(v => {
       if (v.version && v.version !== S.version) refresh();
       loadCut(v.cutVersion);
       loadJG(v.jgVersion);
-      loadSel(v.selVersion);
+      loadSel(v.selVersion).then(() => loadChoiceSrv(v.choiceVersion));
     }).catch(() => { /* 다음 접속 때 다시 확인합니다 */ });
     return;
   }
@@ -887,6 +943,7 @@ async function loadHistory() {
   await loadCut(null);
   await loadJG(null);
   await loadSel(null);
+  await loadChoiceSrv(null);
 }
 
 /* 배치기준표 — 없어도 프로그램은 돌아갑니다. 조용히 시도합니다. */
@@ -924,12 +981,58 @@ async function loadJG(serverVersion) {
 }
 
 /* 선택과목 자료 — 없어도 프로그램은 돌아갑니다. 조용히 시도합니다. */
+/* 선택 결과 — 이 컴퓨터에서 직접 올린 것(이름 있음)이 있으면 그것을, 없으면 서버 것(학급·번호만)을 씁니다.
+   서버 것에는 이 컴퓨터의 학생부 명단에서 학급·번호로 이름을 붙입니다. 명단이 없으면 「3반 12번」으로만 보입니다. */
+async function buildChoice() {
+  const local = await store.get(store.KEY_CHOICE).catch(() => null);
+  if (local?.students?.length) { S.choice = local; S.choice.meta.src = 'local'; return; }
+  const srv = S.choiceSrv || (await store.get(store.KEY_CHOICE_SRV).catch(() => null))?.data;
+  if (!srv?.parts?.length || !S.sel) { S.choice = null; return; }
+  const merged = mergeChoice(srv.parts, S.sel);
+  attachNames(merged);
+  merged.meta.year = srv.meta?.year || merged.meta.year;
+  merged.meta.src = 'server';
+  S.choice = merged;
+}
+
+function attachNames(choice) {
+  const grade = choice.meta.grades?.[0];
+  const list = S.roster?.students || [];
+  const rg = S.roster?.meta?.grade;
+  for (const st of choice.students) {
+    if (st.nm) continue;
+    const hit = list.find(s => s.c % 100 === st.cls && s.no === st.no && (!rg || !grade || rg === grade));
+    st.nm = hit ? hit.nm : '';
+  }
+}
+
+async function loadChoiceSrv(serverVersion) {
+  const cached = await store.get(store.KEY_CHOICE_SRV);
+  const use = async d => {
+    S.choiceSrv = d;
+    await buildChoice();
+    if (!$('app').classList.contains('hidden')) {
+      $('m-sel').textContent = S.choice ? `${S.choice.meta.n}명 반영` : '1·2학년';
+      if (S.mode === 'sel') { fillSelStudents(); selPaint(); }
+    }
+  };
+  if (cached?.data) { S.choiceVersion = cached.version; await use(cached.data); }
+  if (serverVersion === undefined) return;
+  if (cached?.data && serverVersion && cached.version === serverVersion) return;
+  try {
+    const res = await api.fetchChoice(S.key);
+    if (!res.ok || !res.data?.parts) return;
+    S.choiceVersion = res.version;
+    await store.set(store.KEY_CHOICE_SRV, { data: res.data, version: res.version });
+    await use(res.data);
+  } catch { /* 캐시가 있으면 그대로 씁니다 */ }
+}
+
 async function loadSel(serverVersion) {
   const cached = await store.get(store.KEY_SEL);
   const use = async d => {
     S.sel = d;
-    S.choice = await store.get(store.KEY_CHOICE).catch(() => null);
-    if (!S.choice?.students?.length) S.choice = null;
+    await buildChoice();
     if (!$('app').classList.contains('hidden')) {
       $('c-mode-sel').classList.remove('hidden');
       $('m-sel').textContent = S.choice ? `${S.choice.meta.n}명 반영` : '1·2학년';
@@ -1109,6 +1212,7 @@ $('f-cut').addEventListener('change', e => { if (e.target.files[0]) pickCut(e.ta
 $('f-jg').addEventListener('change', e => { if (e.target.files[0]) pickJG(e.target.files[0]); e.target.value = ''; });
 $('f-sel').addEventListener('change', e => { if (e.target.files[0]) pickSel(e.target.files[0]); e.target.value = ''; });
 $('f-choice').addEventListener('change', e => { if (e.target.files.length) loadChoice([...e.target.files]); e.target.value = ''; });
+$('f-choice-adm').addEventListener('change', e => { if (e.target.files.length) pickChoiceAdm([...e.target.files]); e.target.value = ''; });
 
 /* 과목 선택 화면의 조작 */
 $('selfbox').addEventListener('click', e => {

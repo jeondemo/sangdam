@@ -41,6 +41,7 @@ export const KEY_CUT = 'cut';          // 정시 배치기준표 캐시 (대학 
 export const KEY_JG = 'jg';           // 정시 지원가능 자료 (대학 공개 자료 — 이름 없음)
 export const KEY_SEL = 'sel';          // 선택과목 자료 캐시 (대학 공개 자료 — 이름 없음)
 export const KEY_CHOICE = 'choice';    // 학생 선택 결과 (실명 — 이 브라우저에만)
+export const KEY_CHOICE_SRV = 'choicesrv';   // 서버에서 받은 선택 결과 (학급·번호만 — 이름 없음)
 
 export async function clearRoster() { await del(KEY_ROSTER); }
 
@@ -52,5 +53,6 @@ export async function clearAll() {
   await del(KEY_JG);
   await del(KEY_SEL);
   await del(KEY_CHOICE);
+  await del(KEY_CHOICE_SRV);
   await del(KEY_LINK);
 }

@@ -678,6 +678,10 @@ export function parseSubjectChoice(workbook, XLSX, filename) {
     if (!arr.length) continue;
     const txt = nm + ' ' + (filename || '');
     const mg = /([1-3])\s*학년/.exec(txt), ms = /([12])\s*학기/.exec(txt);
+    /* 학년도 — 파일·시트 이름의 「2026년」. 없으면 올해(3월 이후) 또는 작년(1·2월)으로 봅니다. */
+    const my = /(20\d{2})\s*(년|학년도)/.exec(txt);
+    const now = new Date();
+    const year = my ? Number(my[1]) : (now.getMonth() >= 2 ? now.getFullYear() : now.getFullYear() - 1);
     let hi = -1, col = {};
     for (let i = 0; i < Math.min(arr.length, 8); i++) {
       const hdr = (arr[i] || []).map(v => (clean(v) || '').replace(/\s+/g, ''));
@@ -707,12 +711,21 @@ export function parseSubjectChoice(workbook, XLSX, filename) {
       if (Object.keys(picks).length) students.push({ cls, no, nm: name, picks });
     }
     if (students.length) out.push({
-      sem: `${mg ? mg[1] : '2'}-${ms ? ms[1] : '1'}`,
+      sem: `${mg ? mg[1] : '2'}-${ms ? ms[1] : '1'}`, year,
       sheet: nm, n: students.length, students,
     });
   }
   if (!out.length) throw new Error('선택 결과를 읽지 못했습니다. 「이름」 열이 있는 시트인지 확인해 주세요.');
   return out;
+}
+
+/* 서버로 보내기 전에 이름을 지웁니다. 학급·번호·과목만 남습니다.
+   이름은 각 선생님 컴퓨터의 학생부 명단에서 학급·번호로 다시 붙입니다. */
+export function stripChoiceNames(parts) {
+  return parts.map(p => ({
+    sem: p.sem, year: p.year, sheet: p.sheet, n: p.n,
+    students: p.students.map(st => ({ cls: st.cls, no: st.no, picks: st.picks })),
+  }));
 }
 
 /* 여러 학기 파일을 하나로 — 타임·인원 집계와 학생별 이수 목록.
@@ -738,7 +751,7 @@ export function mergeChoice(list, sel) {
     S.n = Math.max(S.n, part.n);
     for (const st of part.students) {
       const key = `${st.cls}-${st.no}`;
-      if (!byStu.has(key)) byStu.set(key, { cls: st.cls, no: st.no, nm: st.nm, by: {} });
+      if (!byStu.has(key)) byStu.set(key, { cls: st.cls, no: st.no, nm: st.nm || '', by: {} });
       const rec = byStu.get(key);
       const names = [];
       for (const [raw, v] of Object.entries(st.picks)) {
@@ -768,7 +781,9 @@ export function mergeChoice(list, sel) {
   }
   const students = [...byStu.values()].sort((a, b) => a.cls - b.cls || a.no - b.no);
   for (const s of students) s.taken = [...new Set(Object.values(s.by).flat())];
-  return { sem, students, meta: { n: students.length, sems: Object.keys(sem).sort(), loadedAt: Date.now() } };
+  const years = [...new Set(list.map(p => p.year).filter(Boolean))].sort();
+  const grades = [...new Set(list.map(p => Number(String(p.sem)[0])).filter(Boolean))].sort();
+  return { sem, students, meta: { n: students.length, sems: Object.keys(sem).sort(), year: years[years.length - 1] || null, grades, loadedAt: Date.now() } };
 }
 
 /* ── 정시 지원가능 자료 (.xlsb) ─────────────────────

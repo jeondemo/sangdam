@@ -491,6 +491,49 @@ function fieldPane(f, sel, WHERE) {
   return pane('', f.name, p.join(' ') + pref, src, f.memo);
 }
 
+/* 「2학년 → 3학년 선택」 화면 — 3학년 상자 위에 「지금 듣고 있는 과목」을 깔아 둡니다.
+   이 분야와 관계있는 과목을 앞에, 나머지는 「그 외」로 접고, 핵심 과목 진행을 한 줄로 보여 줍니다. */
+function takenBlock(sel, picked, stu, choice, TK) {
+  const by = stu?.by || {};
+  const sems = Object.keys(by).filter(k => k.startsWith('2')).sort();
+  if (!sems.length) return '';
+  const kindOf = s => [sel.school.kind[s], sel.school.area[s]].filter(Boolean).join(' · ');
+  let total = 0;
+  const cols = sems.map(sem => {
+    const subs = by[sem] || []; total += subs.length;
+    const rel = [], etc = [];
+    for (const sub of subs) { const m = mergeSub(picked, sub); if (m) rel.push({ s: sub, m }); else etc.push(sub); }
+    rel.sort((a, b) => TIER_RANK[a.m.t] - TIER_RANK[b.m.t] || (b.m.n || 0) - (a.m.n || 0));
+    const rows = rel.map(r => `<div class="tk-row"><span class="bx">✓</span><b>${esc(r.s)}</b><i>${esc(kindOf(r.s))}</i>
+      <span class="rt">${r.m.n ? `<span class="why">${r.m.n}곳</span>` : ''}<span class="tag ${TCLS[r.m.t]}">${TIER_NAME[r.m.t]}</span></span></div>`).join('');
+    const etcHtml = etc.length ? `<div class="tk-etc"><b>그 외 ${etc.length}과목</b> — ${etc.map(esc).join(', ')}</div>`
+      : (rel.length ? '' : '<div class="tk-etc">선택 기록이 없습니다.</div>');
+    return `<div class="tk-sem"><div class="th">${esc(semLabel(sem))}<small>${subs.length}과목</small></div>${rows}${etcHtml}</div>`;
+  }).join('');
+
+  /* 핵심 과목 진행 — 이수한 것 / 3학년에서 고를 것 / 2학년에 있었는데 안 들은 것 */
+  const seen = new Set(), pills = [];
+  const push = (sub, sem, g) => {
+    if (seen.has(sub)) return; seen.add(sub);
+    const m = mergeSub(picked, sub); if (!m || m.t !== 'core') return;
+    if (TK.has(sub)) pills.push(`<span class="pill done">${esc(sub)} ✓</span>`);
+    else if (String(sem).startsWith('3')) pills.push(`<span class="pill todo">${esc(sub)} → ${esc(semLabel(sem))}${g ? ' ' + esc(g) + '그룹' : ' 전원'}</span>`);
+    else if (String(sem).startsWith('1')) pills.push(`<span class="pill done">${esc(sub)} ✓ <small>1학년 공통</small></span>`);
+    else pills.push(`<span class="pill miss">${esc(sub)} — 2학년에 안 들음</span>`);
+  };
+  for (const c of sel.school.common) push(c.s, c.sem, null);
+  for (const g of sel.school.groups) for (const sub of g.subs.concat(g.only2 || [])) push(sub, g.sem, g.g);
+  const prog = pills.length ? `<div class="tk-prog"><span class="lab">이 분야 핵심 과목</span>${pills.join('')}</div>` : '';
+
+  const year = choice?.meta?.year;
+  const now = new Date(); const cur = now.getMonth() >= 2 ? now.getFullYear() : now.getFullYear() - 1;
+  const old = year && year < cur;
+  return `<div class="takenblk${old ? ' old' : ''}"><div class="bh"><span class="h">2학년 — 지금 듣고 있는 과목
+      <small>${year ? `${year}학년도 ` : ''}반별 선택 기준 · 이 분야와 관계있는 것만 앞에${old ? ' · <b>작년 자료입니다</b>' : ''}</small></span>
+      <span class="n">1·2학기 ${total}과목 이수 중</span></div>
+    <div class="bd">${cols}${prog}</div></div>`;
+}
+
 export function selPanel(sel, st) {
   const { picked, grade, chosen, taken, choice, sumOpen, openG } = st;
   const WHERE = whereOf(sel);
@@ -586,6 +629,7 @@ export function selPanel(sel, st) {
   return head
     + (good.length ? pane('ok', '확인된 것', good.join('<br>')) : '')
     + (warn.length ? pane('warn', '짚어야 할 것', warn.join('<br>')) : '')
+    + (grade === 2 && st.stu ? takenBlock(sel, picked, st.stu, choice, TK) : '')
     + `<div class="sems">${cards}</div>`;
 }
 

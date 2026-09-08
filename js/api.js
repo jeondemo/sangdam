@@ -89,6 +89,13 @@ export async function fetchSel(key) {
   return res.json();
 }
 
+/* 학년별 선택 결과(학급·번호·과목만, 이름 없음) — 없어도 프로그램은 돌아갑니다. */
+export async function fetchChoice(key) {
+  const res = await fetch(url({ k: key, mode: 'choice' }));
+  if (!res.ok) throw new Error(`서버 응답 오류 (${res.status})`);
+  return res.json();
+}
+
 /* ── 정시 자료 자동 받기 ────────────────────────────
    제작자 저장소에서 최신 파일을 확인하고 내려받습니다. 관리자 화면에서만 씁니다. */
 
