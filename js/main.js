@@ -259,6 +259,7 @@ function clearStudent() {
   if ($('gpanote')) $('gpanote').textContent = '';
   if ($('gpasubs')) $('gpasubs').innerHTML = '';
   $('gpa5c')?.classList.add('hidden');
+  $('gpa5c')?.classList.remove('est');
   $('stucard')?.classList.add('hidden');
 }
 
@@ -365,6 +366,7 @@ function onStudentChange() {
     /* 전교과 5등급은 1·2학년 성적표에만 들어 있습니다. */
     $('gpa5').textContent = S.cur.a5 != null ? S.cur.a5.toFixed(2) : '—';
     $('gpa5c').classList.toggle('hidden', S.cur.a5 == null);
+    $('gpa5c').classList.remove('est'); $('gpa5c').title = '';
   }
   $('stucard').classList.remove('hidden');
   run();
@@ -566,11 +568,41 @@ function paintUnits() {
   }
   const res = matchUnits(S.sel, selSubs().all);
   SEL.uFilter = 'all'; SEL.uQ = '';
-  $('s-univ').innerHTML = R.selUnits(res, { apps: univApps(), nUniv: S.sel.meta?.nUniv });
+  $('s-univ').innerHTML = R.selUnits(res, { apps: univApps(), nUniv: S.sel.meta?.nUniv, coverage: unitCoverage() });
   $('c-suniv').textContent = res.filter(r => r.st === 'full').length;
 }
 
 /* 표는 한 번만 그리고, 칩·검색은 줄을 감추는 것으로 처리합니다. */
+/* 권장과목 자료에 어느 대학이 있는지 — 없는 주요대와 한 계열만 낸 대학을 골라냅니다. */
+const MAJOR_UNIV = ['서울대', '연세대', '고려대', '서강대', '성균관대', '한양대', '중앙대', '경희대', '한국외대', '서울시립대',
+  '이화여대', '건국대', '동국대', '홍익대', '국민대', '숭실대', '세종대', '단국대', '아주대', '인하대', '광운대', '서울과기대',
+  '숙명여대', '성신여대', '덕성여대', '동덕여대', '서울여대', '가톨릭대', '명지대', '상명대', '경기대'];
+const GY_KO = { 인문: '인문', 사회: '사회', 교육: '교육', 자연: '자연', 공학: '공학', 의약: '의약', 예체능: '예체능' };
+function unitCoverage() {
+  const units = S.sel?.units || [];
+  const byU = new Map();
+  for (const r of units) {
+    const k = univKey(r.u);
+    if (!byU.has(k)) byU.set(k, { u: r.u.replace(/\s*\(.*?\)\s*/g, ''), hum: 0, nat: 0 });
+    const o = byU.get(k);
+    for (const f of r.f || []) {
+      const gy = S.sel.fields?.[f]?.gy;
+      if (['인문', '사회', '예체능'].includes(gy)) o.hum++;
+      else if (['자연', '공학', '의약'].includes(gy)) o.nat++;
+      /* 「교육」은 사범대처럼 계열이 섞여 있어 세지 않습니다 */
+    }
+  }
+  const present = new Set([...byU.keys()]);
+  const absent = MAJOR_UNIV.filter(u => !present.has(univKey(u)));
+  const partial = [];
+  for (const o of byU.values()) {
+    if (!MAJOR_UNIV.some(m => univKey(m) === univKey(o.u))) continue;
+    const tot = o.hum + o.nat;
+    if (tot >= 3 && (o.hum === 0 || o.nat === 0)) partial.push({ u: o.u, gy: o.hum ? '인문·사회계열' : '자연·공학·의약계열' });
+  }
+  return { nUniv: byU.size, absent, partial, byU };
+}
+
 function filterUnits() {
   let n = 0;
   $('s-univ').querySelectorAll('tr.ur').forEach(tr => {
@@ -580,6 +612,25 @@ function filterUnits() {
     if (ok) n++;
   });
   const e = $('unone'); if (e) e.hidden = n > 0;
+  /* 검색어에 맞는 대학이 자료에 아예 없거나, 그 대학이 한 계열만 낸 경우를 짚어 줍니다. */
+  const ab = $('uabsent');
+  if (ab) {
+    ab.hidden = true;
+    if (n === 0 && SEL.uQ) {
+      const cov = unitCoverage();
+      const q = SEL.uQ.replace(/\s+/g, '');
+      const hit = [...cov.byU.values()].find(x => univKey(x.u).includes(q.split(/대/)[0]) && q.length >= 2);
+      const uname = q.replace(/(학교|경영|경제|의예|공학|학과|학부).*$/, '');
+      if (!hit && uname) {
+        ab.innerHTML = `<b>${esc(uname)}</b>… 로 시작하는 대학은 이 자료에 없습니다. 권장과목을 공개하지 않은 대학이라 표에 안 나오는 것이지, 지원에 불리하다는 뜻이 아닙니다.`;
+        ab.hidden = false;
+      } else if (hit) {
+        const p = cov.partial.find(x => x.u === hit.u);
+        ab.innerHTML = `<b>${esc(hit.u)}</b>는 ${p ? `<b>${esc(p.gy)}</b> 모집단위만 권장과목을 냈습니다. 그 밖의 학과는 과목을 지정하지 않았습니다.` : '이 검색어에 맞는 모집단위가 없습니다. 학과 이름을 줄여서 찾아 보세요.'}`;
+        ab.hidden = false;
+      }
+    }
+  }
 }
 
 function selPick(name) {
@@ -1380,6 +1431,33 @@ $('gpa').addEventListener('input', () => {
 let timer = null;
 ['gpa', 'c_k', 'c_m', 'c_e', 'c_s1', 'c_s2', 'p_k', 'p_m', 'p_s1', 'p_s2', 'p_e', 'topn', 'yrs'].forEach(id =>
   $(id).addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 350); }));
+
+/* 9등급 칸을 손으로 바꾸면 5등급 칸이 추정치로 따라갑니다.
+   5등급은 과목 조합에 따라 같은 9등급에서도 달라지므로 정확한 환산은 없고, 올린 명단으로 맞춘 직선(5 ≈ a + b×9)을 씁니다.
+   학생부 실제 값과 구분되게 「≈」를 붙이고 옅게 보여 줍니다. */
+function fit5() {
+  const m = S.roster?.meta; if (!m?.has5) return null;
+  if (m.fit5) return m.fit5;
+  const pts = S.roster.students.filter(x => x.a5 != null && x.g?.[3] != null).map(x => [x.g[3], x.a5]);
+  if (pts.length < 10) return null;
+  const n = pts.length, mx = pts.reduce((a, p) => a + p[0], 0) / n, my = pts.reduce((a, p) => a + p[1], 0) / n;
+  const sxx = pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0);
+  if (!sxx) return null;
+  const b = pts.reduce((a, p) => a + (p[0] - mx) * (p[1] - my), 0) / sxx;
+  return (m.fit5 = { a: my - b * mx, b });
+}
+function updateGpa5() {
+  const el = $('gpa5'), box = $('gpa5c'); if (!el || !box) return;
+  const v = numOf('gpa'), f = fit5();
+  if (S.cur?.a5 != null && v != null && Math.abs(v - S.cur.g[3]) < 0.005) {
+    el.textContent = S.cur.a5.toFixed(2); box.classList.remove('est'); box.title = ''; return;      // 학생부 실제 값
+  }
+  if (!f || v == null) { if (S.cur?.a5 == null) box.classList.add('hidden'); return; }
+  const est = Math.min(5, Math.max(1, f.a + f.b * v));
+  el.textContent = `≈${est.toFixed(2)}`; box.classList.remove('hidden'); box.classList.add('est');
+  box.title = '추정치 — 9등급을 손으로 바꿔서, 우리 학교 명단으로 맞춘 식(5등급 ≈ ' + f.a.toFixed(2) + ' + ' + f.b.toFixed(2) + '×9등급)으로 계산한 값입니다';
+}
+$('gpa').addEventListener('input', updateGpa5);
 
 bindChips('gychips', b => { selGy = +b.dataset.gy; run(); });
 bindChips('modechips', b => setMode(b.dataset.mode));

@@ -723,10 +723,19 @@ export function selUnits(res, st) {
 
   const chip = (k, label, num) => `<button class="chip" data-uf="${k}" aria-pressed="${k === 'all'}">${label}${num != null ? ` <span class="c">${num}</span>` : ''}</button>`;
 
+  /* 어느 대학이 있고 없는지를 먼저 말해 둡니다 — 「연세대 경영이 왜 안 나오지」가 가장 흔한 질문입니다. */
+  const cov = st.coverage || {};
+  const absent = (cov.absent || []).length ? `<b>${cov.absent.map(esc).join('·')}</b>는 권장과목을 공개하지 않아 이 표에 없습니다.` : '';
+  const partial = (cov.partial || []).length ? ` ${cov.partial.map(x => `<b>${esc(x.u)}</b>는 ${esc(x.gy)}만`).join(', ')} 냈습니다.` : '';
+  const covNote = `<div class="note fine"><b>이 표에 나오는 대학은 권장과목을 공개한 ${cov.nUniv || st.nUniv || 47}곳뿐입니다</b>
+      (대교협 「2028학년도 대학 전공별 권장과목 안내」 + 서울대 「전공 연계 교과이수 과목」). ${absent}${partial}
+      권장과목을 안 낸 대학은 「과목을 지정하지 않는다」는 뜻이지 지원에 불리한 게 아닙니다.</div>`;
+
   return `<div class="uwarn"><b>권장과목은 지원 자격이 아닙니다.</b>
       대학이 「이런 과목을 들으면 좋다」고 안내한 것이지, 안 들으면 지원할 수 없다는 뜻이 아닙니다.
       대부분 학생부 서류평가에서 참고 자료로 씁니다. 그래서 이 화면은 <b>가능·불가능</b>이 아니라
       <b>이미 채운 것 / 앞으로 더 들을 것 / 우리 학교에 없는 것</b>으로 나눠 보여 줍니다.</div>
+    ${covNote}
 
     <div class="usum">
       <div class="u1 a"><div class="v">${c.full}</div><div class="k">지금 조합으로 이미 충족</div></div>
@@ -744,6 +753,7 @@ export function selUnits(res, st) {
       <tbody>${rows}</tbody>
     </table></div>
     <div class="note fine" id="unone" hidden>조건에 맞는 모집단위가 없습니다.</div>
+    <div class="note warn" id="uabsent" hidden></div>
     <div class="note fine"><span class="sc g">초록</span> 이미 들었거나 지금 고른 과목 ·
       <span class="sc l">파랑<i>2-2 B</i></span> 우리 학교에 있는데 아직 안 고른 과목(어느 학기·묶음인지 함께 표시) ·
       <span class="sc m">빨강</span> 우리 학교에 개설되지 않은 과목.<br>

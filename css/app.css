@@ -761,3 +761,7 @@ table.jgtbl td.b{font-weight:700}
 .trend.five .cur small{color:#c9b788}
 /* 전교과 9등급 입력칸과 같은 색 — 두 카드의 9등급 칸이 같은 자리로 보이게 */
 .cbv>div.g9{background:rgba(30,48,120,.42)}
+
+/* 5등급 추정치 — 9등급을 손으로 바꿨을 때. 실제 값과 구분되게 옅게 */
+.cbv>div#gpa5c.est b{color:#a9b6dc;font-weight:700}
+.cbv>div#gpa5c.est span::after{content:" 추정";color:#dbb97f;font-weight:700}
