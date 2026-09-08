@@ -649,10 +649,11 @@ export function selMiss(sel, picked) {
   const extra = sel.school.extra.map(e => `${esc(e.s)} <span class="fine">(${esc(e.note || e.sem)})</span>`).join(' · ');
   if (!ms.length) return `<div class="note">이 분야가 권장하는 과목은 <b>우리 학교에서 모두 들을 수 있습니다.</b></div>`
     + (extra ? `<div class="note fine">공동교육과정·주문형 강좌: ${extra}</div>` : '');
-  return `<div class="note warn">대학이 권장하지만 <b>우리 학교에 개설되지 않은</b> 과목입니다. 공동교육과정으로 메울 수 있는지 확인해 보세요.</div>
-  <div class="tbl-wrap"><table><thead><tr><th>과목</th><th>등급</th><th class="n">근거 대학</th><th>요구한 분야</th></tr></thead><tbody>
+  return `<div class="note warn">대학이 권장하지만 <b>우리 학교 정규 편제에 없는</b> 과목입니다. 「대안」에 공동교육과정·주문형 강좌가 있으면 그쪽으로 들을 수 있습니다.</div>
+  <div class="tbl-wrap"><table><thead><tr><th>과목</th><th>등급</th><th class="n">근거 대학</th><th>요구한 분야</th><th>대안</th></tr></thead><tbody>
   ${ms.map(m => `<tr><td><b>${esc(m.s)}</b></td><td class="nw">${esc(m.r)}</td><td class="n">${m.n}곳</td>
-    <td class="mut">${esc(m.f.filter(x => names.has(x)).join(', '))}</td></tr>`).join('')}
+    <td class="mut">${esc(m.f.filter(x => names.has(x)).join(', '))}</td>
+    <td class="nw">${m.alt ? `<span class="tag t-ok">${esc(m.alt)}</span>` : '<span class="mut">—</span>'}</td></tr>`).join('')}
   </tbody></table></div>
   ${extra ? `<div class="note fine" style="margin-top:12px">공동교육과정·주문형 강좌: ${extra}</div>` : ''}`;
 }

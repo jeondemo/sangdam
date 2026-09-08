@@ -631,12 +631,13 @@ export function parseSubjectTable(workbook, XLSX) {
   /* 5) 미개설 */
   a = sheetRows(workbook, XLSX, SEL_SHEETS.miss);
   if (a) {
-    h = headMap(a, { sub: ['과목'], f: ['이과목을권장한분야', '권장한분야'], tier: ['최고등급', '등급'], n: ['근거대학수'] });
+    h = headMap(a, { sub: ['과목'], f: ['이과목을권장한분야', '권장한분야'], tier: ['최고등급', '등급'], n: ['근거대학수'], alt: ['대안'] });
     if (h) for (let i = h.hi + 1; i < a.length; i++) {
       const sub = get(a[i], h.col, 'sub');
       if (!sub) continue;
       out.missing.push({ s: sub, r: get(a[i], h.col, 'tier') || '', n: num(a[i][h.col.n]) || 0,
-        f: (get(a[i], h.col, 'f') || '').split(',').map(x => x.trim()).filter(Boolean) });
+        f: (get(a[i], h.col, 'f') || '').split(',').map(x => x.trim()).filter(Boolean),
+        alt: h.col.alt != null ? (get(a[i], h.col, 'alt') || '') : '' });
     }
   }
 
