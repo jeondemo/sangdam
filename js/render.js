@@ -2,7 +2,7 @@
 
 import { isPass, JUDGE } from './match.js';
 import { TIER_NAME, TIER_RANK, mergeSub, feasible, summaryOf, whereOf,
-  sciProgress, isSci, overCore, groupsFor, univKey, semLabel } from './subject.js';
+  sciProgress, isSci, overCore, groupsFor, univKey, semLabel, planFor, PREREQ } from './subject.js';
 
 /* 학급 코드는 306처럼 「학년+반」 세 자리입니다. 화면에는 「3학년 6반」으로 풉니다. */
 export const clsLabel = c => (c >= 100 ? `${Math.floor(c / 100)}학년 ${c % 100}반` : `${c}반`);
@@ -486,17 +486,94 @@ export function pickedChips(picked) {
   return picked.map(f => `<span class="pk"><b>${esc(f.name)}</b><button data-x="${esc(f.name)}">×</button></span>`).join('');
 }
 
-/* 분야 설명 — 표에 있는 값만 조합합니다. */
-function fieldPane(f, sel, WHERE) {
+/* ── 분야 안내 ──────────────────────────────────────
+   ① 대학이 보는 것 — 표의 숫자로 만든 문장 + 선택과목.xlsx 「분야안내」의 문장
+   ② 우리 학교 편제로 짜면 — planFor()가 권장과목·편제표로 계산 (글 없음)
+   ③ 흔한 실수와 위계 — 「분야안내」의 문장
+   줄 앞 ●◐○◆ 는 꼬리표로 바뀝니다. 남의 문장은 넣지 않고 우리 말로 정리한 것만 들어 있습니다. */
+const GTAG = { '●': ['대학 원문', 'src1'], '◐': ['대학 안내서', 'src1'], '○': ['강의 정리', 'src2'], '◆': ['학교 편제', 'src3'] };
+function gline(t) {
+  const m = GTAG[t.charAt(0)];
+  const body = m ? t.slice(1).trim() : t;
+  return esc(body) + (m ? `<span class="gt ${m[1]}">${m[0]}</span>` : '');
+}
+const SNU_TYPE = { '①': '유형① — 제2외국어·한문 1과목 이상', '②': '유형② — 기하·미적분Ⅱ + 과학 진로선택 3과목 이상' };
+
+function guidePane(f, sel, st) {
+  const { picked, grade } = st;
+  const WHERE = whereOf(sel);
   const s = summaryOf(f, sel), p = [];
   if (s.areas.length) p.push(`교과로는 ${s.areas.map(([k, v]) => `<b>${esc(k)}</b>(${v.n}곳)`).join(', ')}을 봅니다.`);
   if (s.already.length) p.push(`이 중 ${s.already.map(([k]) => esc(k)).join('·')}은 우리 학교에서 전원이 이미 듣습니다.`);
   if (s.topick.length) p.push(`직접 골라야 하는 것은 ${s.topick.map(([k, v]) =>
     `<b>${esc(k)}</b> <span class="fine">(${v.n}곳 · ${esc(WHERE[k] || '')})</span>`).join(', ')}입니다.`);
-  if (!p.length) p.push('대학이 따로 지정한 과목이 없습니다. 진로와 적성에 맞게 고르면 됩니다.');
-  const src = `대교협 ${f.nOwn + f.nGen}곳` + (f.snu ? ` · 서울대 ${f.snu}` : '');
-  const pref = f.pref ? `<br><span class="fine">서울대 우선 이수 권장 — ${esc(f.pref)}</span>` : '';
-  return pane('', f.name, p.join(' ') + pref, src, f.memo);
+  if (!p.length) p.push('대학이 이름으로 지정한 과목이 없습니다. 아래 갈래를 참고해 진로에 맞게 고르면 됩니다.');
+  const see = [`<p>${p.join(' ')}<span class="gt src1">대학 원문</span></p>`];
+  if (f.snu) {
+    const types = ['①', '②'].filter(k => f.snu.includes(k)).map(k => SNU_TYPE[k]);
+    see.push(`<p>서울대는 ${esc(f.snu)}로 봅니다 — ${types.map(esc).join(' / ')}.`
+      + (f.pref ? ` 우선 이수 권장 과목은 <b>${esc(f.pref)}</b>입니다.` : '') + '<span class="gt src1">대학 원문</span></p>');
+  }
+  for (const t of f.guide?.see || []) see.push(`<p>${gline(t)}</p>`);
+
+  /* ② */
+  const pl = planFor(sel, picked, grade, st.stu?.taken);
+  const semKeys = Object.keys(pl.sems).sort();
+  const cols = semKeys.map(sem => {
+    const semNo = sem.split('-')[1] || '1';
+    const groups = pl.sems[sem].map(g => {
+      const chips = g.take.map(t => {
+        const meta = t.k === 'area' ? `${esc(t.area)} 교과 ${t.n}곳` : `${t.n}곳`;
+        const gap = t.gap ? `<i class="gap">2학년 ${esc(PREREQ_NAME(t.s))} 안 들음</i>` : '';
+        return `<span class="pc ${t.k}${t.gap ? ' gapped' : ''}">${esc(t.s)}<i>${meta}</i>${gap}</span>`;
+      });
+      if (g.spare) chips.push(`<span class="pc free">자유 ${g.spare}과목<i>${esc(g.otherArea || '')}${g.otherArea ? ' 중' : ''}</i></span>`);
+      const alt = g.rest.length ? `<div class="pln">또는 ${g.rest.slice(0, 4).map(r => `${esc(r.s)}(${r.m.n}곳)`).join(' · ')}${g.rest.length > 4 ? ' …' : ''}</div>` : '';
+      return `<div class="plg"><small>${esc(g.g)}묶음 택${g.pick}</small>${chips.join('')}${alt}</div>`;
+    }).join('');
+    const fr = pl.free.filter(x => x.sem === sem);
+    const frTxt = fr.length ? `<div class="pln">${fr.map(x => `${esc(x.g)}묶음(${esc(x.area)})`).join('·')}은 이 분야와 관계없으니 자유롭게 고릅니다.</div>` : '';
+    return `<div class="pl s${semNo}"><div class="plh">${esc(semLabel(sem))}</div>${groups}${frTxt}</div>`;
+  });
+  if (pl.preview) {
+    const pv = pl.preview;
+    const chips = pv.subs.map(x => `<span class="pc next">${esc(x.s)}<i>${esc(semLabel(x.sem))}</i></span>`).join('');
+    const note = pv.pres.length ? `<div class="pln">2학년에 <b>${pv.pres.map(esc).join('·')}</b>을 들어야 이 과목들로 이어집니다.</div>`
+      : (pv.subs.length ? '' : '<div class="pln">대학이 이름으로 지정한 3학년 과목은 없습니다. 2학년에 잡은 갈래를 3학년까지 잇습니다.</div>');
+    cols.push(`<div class="pl s3"><div class="plh">3학년 미리 보기</div>${chips}${note}</div>`);
+  }
+  const commonCore = sel.school.common.filter(c => { const m = mergeSub(picked, c.s); return m && (m.t === 'core' || m.t === 'rec'); })
+    .map(c => esc(c.s));
+  const fine = [];
+  if (commonCore.length) fine.push(`전원이 듣는 ${[...new Set(commonCore)].join('·')}이 이 분야의 핵심을 이미 채웁니다.<span class="gt src3">학교 편제</span>`);
+  if (grade === 1 && f.snu.includes('①')) fine.push('C묶음(제2외국어·한문) 하나로 서울대 유형①은 채워집니다.<span class="gt src1">대학 원문</span>');
+  const plan = `<div class="plan c${cols.length}">${cols.join('')}</div>${fine.map(x => `<p class="fine">${x}</p>`).join('')}`;
+
+  /* ③ */
+  const miss = (f.guide?.miss || []).map(t => `<li>${gline(t)}</li>`);
+  const src = `근거 — 대교협 2028 권장과목 ${f.nOwn + f.nGen}개 모집단위(「대학별 원문」 탭)` + (f.snu ? ` · ${SNU_SRC}` : '') + (f.guide?.src ? ` · ${esc(f.guide.src)}` : '');
+
+  const body = `<div class="gsec"><div class="gh">① 대학이 보는 것</div>${see.join('')}</div>`
+    + `<div class="gsec"><div class="gh">② 우리 학교 편제로 짜면 <small>${grade === 1 ? '1학년 → 2학년 선택' : '2학년 → 3학년 선택'}</small></div>${plan}</div>`
+    + (miss.length ? `<div class="gsec"><div class="gh">③ 흔한 실수와 위계</div><ul>${miss.join('')}</ul></div>` : '')
+    + `<div class="gsrc">${src}</div>`;
+  const head = `대교협 ${f.nOwn + f.nGen}곳` + (f.snu ? ` · 서울대 ${f.snu}` : '');
+  const memo = f.memo || '';
+  return `<div class="pane guide"><div class="ph"><span class="bar"></span><span class="tt">${esc(f.name)}</span><span class="sub">${esc(f.gy)}</span><span class="src">${esc(head)}</span></div>
+    <div class="pb">${body}</div>
+    ${memo ? `<div class="memo"><span class="lb">학교 메모</span>${esc(memo)}</div>` : '<div class="memo empty"><span class="lb">학교 메모</span>선택과목.xlsx 「학문분야」 시트의 학교 메모 칸에 적으면 여기에 나옵니다.</div>'}</div>`;
+}
+const SNU_SRC = '서울대 2028 전공 연계 교과 안내';
+const PREREQ_NAME = s => PREREQ[s] || '';
+
+/* 모든 분야 위에 접혀서 붙는 공통 안내 — 「공통안내」 시트 */
+function commonGuide(sel, open) {
+  const items = sel.guideCommon || [];
+  if (!items.length) return '';
+  if (!open) return `<div class="moretog" data-guide="1">▼ 대학은 과목 선택을 이렇게 읽습니다 — 공통 안내 ${items.length}가지</div>`;
+  const body = items.map(it => `<div class="gsec"><div class="gh">${esc(it.t)}</div><ul>${it.body.map(t => `<li>${gline(t)}</li>`).join('')}</ul></div>`).join('');
+  return `<div class="pane guide common"><div class="ph"><span class="bar"></span><span class="tt">대학은 과목 선택을 이렇게 읽습니다</span><span class="src">모든 분야 공통</span></div><div class="pb">${body}</div></div>
+    <div class="moretog" data-guide="1">▲ 공통 안내 접기</div>`;
 }
 
 /* 「2학년 → 3학년 선택」 화면 — 3학년 상자 위에 「지금 듣고 있는 과목」을 깔아 둡니다.
@@ -544,7 +621,6 @@ function takenBlock(sel, picked, stu, choice, TK) {
 
 export function selPanel(sel, st) {
   const { picked, grade, chosen, taken, choice, sumOpen, openG } = st;
-  const WHERE = whereOf(sel);
   const G = groupsFor(sel, grade);
   const TK = new Set(taken || []);
   const timeOf = (sem, g) => sub => {
@@ -555,11 +631,6 @@ export function selPanel(sel, st) {
 
   /* 카드 위 안내 */
   const good = [], warn = [];
-  const commonCore = sel.school.common.filter(c => {
-    const m = mergeSub(picked, c.s); return m && (m.t === 'core' || m.t === 'rec');
-  }).map(c => `${esc(c.s)} <span class="fine">(${esc(semLabel(c.sem))})</span>`);
-  if (commonCore.length)
-    good.push(`이 분야가 핵심·권장으로 꼽은 과목 중 <b>우리 학교에서 전원이 이미 듣는 것</b> — ${commonCore.join(', ')}`);
 
   if (grade === 2 && st.stu) {
     const pr = sciProgress(TK);
@@ -641,10 +712,10 @@ export function selPanel(sel, st) {
       <span class="n${state}">고른 것 ${B.got} / ${B.pick}</span></div><div class="bd">${fixedStrip(k)}${B.cards.join('')}</div></div>`;
   }).join('');
 
-  const sum = picked.map(f => fieldPane(f, sel, WHERE)).join('');
-  const head = (picked.length > 1 && !sumOpen)
-    ? `<div class="moretog" data-sum="1">▼ 분야별 설명 ${picked.length}개 보기</div>`
-    : sum + (picked.length > 1 ? '<div class="moretog" data-sum="1">▲ 분야별 설명 접기</div>' : '');
+  const sum = picked.map(f => guidePane(f, sel, st)).join('');
+  const head = commonGuide(sel, st.guideOpen) + ((picked.length > 1 && !sumOpen)
+    ? `<div class="moretog" data-sum="1">▼ 분야별 안내 ${picked.length}개 보기</div>`
+    : sum + (picked.length > 1 ? '<div class="moretog" data-sum="1">▲ 분야별 안내 접기</div>' : ''));
 
   return head
     + (good.length ? pane('ok', '확인된 것', good.join('<br>')) : '')

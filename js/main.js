@@ -42,7 +42,7 @@ const S = {
 };
 
 /* 과목 선택 화면의 상태 */
-const SEL = { picked: [], grade: 1, chosen: new Set(), openG: new Set(), sumOpen: false, stu: null,
+const SEL = { picked: [], grade: 1, chosen: new Set(), openG: new Set(), sumOpen: false, guideOpen: false, stu: null,
   uFilter: 'all', uQ: '' };
 let uApps = null;   // 대학 이름 → 우리 학교 6개년 지원 건수
 
@@ -525,7 +525,7 @@ function runSel() {
   const taken = (SEL.grade === 2 && SEL.stu) ? SEL.stu.taken : null;
   $('s-pick').innerHTML = R.selPanel(S.sel, {
     picked: SEL.picked, grade: SEL.grade, chosen: SEL.chosen, taken,
-    choice: S.choice, sumOpen: SEL.sumOpen, openG: SEL.openG, stu: SEL.stu,
+    choice: S.choice, sumOpen: SEL.sumOpen, guideOpen: SEL.guideOpen, openG: SEL.openG, stu: SEL.stu,
   });
   const sb = selSubs();
   $('s-pick').insertAdjacentHTML('beforeend', R.selGoBar(sb.chosen.length, sb.taken.length));
@@ -996,7 +996,8 @@ async function pickSel(file) {
     if (!data.order.length) throw new Error('「학문분야」 시트에서 분야를 찾지 못했습니다.');
     pendingSel = data;
     const m = data.meta;
-    $('s-parsed').innerHTML = `<b style="color:#e5ebfa">${m.nField}개 학문분야</b> · 권장과목 ${m.nRec.toLocaleString()}건 · 우리 학교 ${m.nSub}과목`;
+    $('s-parsed').innerHTML = `<b style="color:#e5ebfa">${m.nField}개 학문분야</b> · 권장과목 ${m.nRec.toLocaleString()}건 · 우리 학교 ${m.nSub}과목`
+      + (m.nGuide ? ` · 분야 안내글 ${m.nGuide}개` : ' · <span style="color:#f3c9c9">분야 안내글 없음(「분야안내」 시트)</span>');
     $('s-send').disabled = false;
   } catch (e) {
     $('s-parsed').innerHTML = `<span style="color:#ff9c9c">읽지 못했습니다 — ${esc(e.message)}</span>`;
@@ -1385,6 +1386,8 @@ $('s-pick').addEventListener('click', e => {
   if (more) { const k = more.dataset.m; SEL.openG.has(k) ? SEL.openG.delete(k) : SEL.openG.add(k); return runSel(); }
   const tog = e.target.closest('.moretog[data-sum]');
   if (tog) { SEL.sumOpen = !SEL.sumOpen; return runSel(); }
+  const gtog = e.target.closest('.moretog[data-guide]');
+  if (gtog) { SEL.guideOpen = !SEL.guideOpen; return runSel(); }
   if (e.target.closest('#btn-univ')) { selTab('univ'); toTop($('seltabs')); }
 });
 $('s-univ').addEventListener('click', e => {

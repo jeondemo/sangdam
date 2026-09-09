@@ -541,6 +541,8 @@ const SEL_SHEETS = {
   cur: ['우리학교과목', '우리 학교 과목'],
   miss: ['미개설과목', '미개설 과목'],
   unit: ['대학별원문', '대학별 원문'],
+  guide: ['분야안내', '분야 안내'],
+  gcommon: ['공통안내', '공통 안내'],
 };
 
 function sheetRows(wb, XLSX, names) {
@@ -672,10 +674,37 @@ export function parseSubjectTable(workbook, XLSX) {
     }
   }
 
+  /* 7) 분야 안내·공통 안내 — 없어도 되는 시트입니다. 한 칸에 여러 줄이면 줄마다 문장 하나입니다.
+        줄 앞 ●◐○◆ 는 화면에서 꼬리표(대학 원문·대학 안내서·강의 정리·학교 편제)가 됩니다. */
+  const lines = v => String(v ?? '').split(/\r?\n/).map(x => x.trim()).filter(Boolean).slice(0, 12);
+  let nGuide = 0;
+  a = sheetRows(workbook, XLSX, SEL_SHEETS.guide);
+  if (a) {
+    h = headMap(a, { name: ['학문분야'], see: ['대학이보는것'], miss: ['흔한실수'], src: ['출처'] });
+    if (h) for (let i = h.hi + 1; i < a.length; i++) {
+      const f = out.fields[get(a[i], h.col, 'name')];
+      if (!f) continue;
+      const see = lines(h.col.see != null ? a[i][h.col.see] : ''), miss = lines(h.col.miss != null ? a[i][h.col.miss] : '');
+      if (!see.length && !miss.length) continue;
+      f.guide = { see, miss, src: get(a[i], h.col, 'src') || '' };
+      nGuide++;
+    }
+  }
+  out.guideCommon = [];
+  a = sheetRows(workbook, XLSX, SEL_SHEETS.gcommon);
+  if (a) {
+    h = headMap(a, { t: ['제목'], body: ['내용'] });
+    if (h) for (let i = h.hi + 1; i < a.length; i++) {
+      const t = get(a[i], h.col, 't'), body = lines(h.col.body != null ? a[i][h.col.body] : '');
+      if (t && body.length && out.guideCommon.length < 8) out.guideCommon.push({ t, body });
+    }
+  }
+
   const nF = out.order.length;
   if (!nF || !nRec) throw new Error('선택과목 자료를 읽지 못했습니다. 시트 이름과 머리글을 확인해 주세요.');
   return { fields: out.fields, order: out.order, school: out.school, missing: out.missing, units: out.units,
-    meta: { nField: nF, nRec, nSub: Object.keys(out.school.kind).length,
+    guideCommon: out.guideCommon,
+    meta: { nField: nF, nRec, nGuide, nSub: Object.keys(out.school.kind).length,
       nUnit: out.units.length, nUniv: new Set(out.units.map(x => x.u)).size, loadedAt: Date.now() } };
 }
 

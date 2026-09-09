@@ -765,3 +765,44 @@ table.jgtbl td.b{font-weight:700}
 /* 5등급 추정치 — 9등급을 손으로 바꿨을 때. 실제 값과 구분되게 옅게 */
 .cbv>div#gpa5c.est b{color:#a9b6dc;font-weight:700}
 .cbv>div#gpa5c.est span::after{content:" 추정";color:#dbb97f;font-weight:700}
+
+/* ── 분야 안내 (①②③ + 학교 메모) ── */
+.pane.guide .ph .sub{font-size:11.5px;font-weight:700;color:#5b6b83;background:#eef2fa;padding:2px 9px;border-radius:99px}
+.pane.guide .pb{padding-top:6px}
+.pane.guide .gsec{padding:10px 0 4px;border-top:1px dashed #e6e9f0}
+.pane.guide .gsec:first-child{border-top:0}
+.pane.guide .gh{font-size:12.5px;font-weight:800;color:var(--accent);margin-bottom:4px;letter-spacing:-.2px}
+.pane.guide .gh small{font-weight:700;font-size:11px;color:#5b6b83;margin-left:8px}
+.pane.guide .gsec p{margin:2px 0}
+.pane.guide .gsec ul{margin:2px 0 4px;padding-left:18px}
+.pane.guide .gsec li{margin:2px 0}
+.gt{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin-left:5px;vertical-align:1px;white-space:nowrap}
+.gt.src1{background:#e4f4ea;color:#2c7a4d}
+.gt.src2{background:#fff2dc;color:#9a5b00}
+.gt.src3{background:#eef2fa;color:#3b4d78}
+.plan{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:6px 0 8px}
+.plan.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.plan.c1{grid-template-columns:minmax(0,1fr)}
+.pl{border-radius:11px;padding:10px 12px 8px;border:1.5px solid #dfe5f2;background:#fff;min-width:0}
+.pl.s1{background:#f3f6fd;border-color:#c9d5f2}
+.pl.s2{background:#f0faf8;border-color:#bfe3dc}
+.pl.s3{background:#fafafa;border-style:dashed}
+.plh{font-size:13px;font-weight:800;margin-bottom:7px;color:var(--ink)}
+.plg{margin-bottom:6px}
+.plg small{display:block;font-weight:700;font-size:11px;color:#5b6b83;margin-bottom:4px}
+.pc{display:inline-block;font-size:12.5px;font-weight:800;padding:4px 10px;border-radius:8px;margin:0 6px 6px 0;line-height:1.4;max-width:100%}
+.pc i{font-style:normal;font-weight:600;font-size:11px;opacity:.8;margin-left:5px}
+.pc.core{background:#1e2e68;color:#fff}
+.pl.s2 .pc.core{background:#0f766e}
+.pc.opt{background:#fff;border:1.5px solid #9aa9c9;color:#2d3b5e}
+.pc.area{background:#fff;border:1.5px dashed #9aa9c9;color:#2d3b5e;font-weight:700}
+.pc.free{background:transparent;border:1.5px dashed #c3cbd8;color:#6b7a90;font-weight:700}
+.pc.next{background:#fff;border:1.5px dashed #b8b8b8;color:#555;font-weight:700}
+.pc.gapped,.pl.s2 .pc.gapped{background:#fff5f5;border:1.5px solid var(--pass);color:var(--pass)}
+.pc i.gap{display:block;margin:1px 0 0;color:var(--pass);font-weight:700;opacity:1}
+.pln{font-size:11.5px;color:#5b6b83;line-height:1.5;margin:0 0 4px}
+.pln b{color:var(--ink)}
+.gsrc{font-size:11px;color:var(--faint);margin-top:8px;line-height:1.6}
+.pane .memo.empty{color:#8a80bd;font-style:italic}
+.pane.guide.common .pb{padding-top:2px}
+@media (max-width:900px){.plan,.plan.c2{grid-template-columns:minmax(0,1fr)}}

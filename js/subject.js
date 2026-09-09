@@ -222,3 +222,86 @@ export function univKey(name) {
     .replace(/여자대/g, '여대').replace(/교육대/g, '교대')
     .replace(/(ERICA|글로컬|국제|제2|미래|세종|천안|삼척|도계|춘천|여수|광주|서울)$/, '');
 }
+
+/* ── 분야 안내 「② 우리 학교 편제로 짜면」 ──────────────
+   권장과목 등급과 편제표만으로 학기별 추천 구성을 만듭니다. 글은 한 줄도 넣지 않습니다.
+   위계: 진로 과목 → 그 앞 단계 과목. 3학년 과목이 2학년에서 이어지는지 볼 때 씁니다. */
+export const PREREQ = {
+  '역학과 에너지': '물리학', '전자기와 양자': '물리학',
+  '물질과 에너지': '화학', '화학 반응의 세계': '화학',
+  '세포와 물질대사': '생명과학', '생물의 유전': '생명과학',
+  '지구 시스템과학': '지구과학', '행성우주과학': '지구과학',
+  '윤리와 사상': '현대사회와 윤리', '윤리문제 탐구': '현대사회와 윤리',
+  '정치': '사회와 문화', '법과 사회': '사회와 문화', '경제': '사회와 문화', '사회문제 탐구': '사회와 문화',
+  '여행지리': '세계시민과 지리', '역사로 탐구하는 현대 세계': '세계사',
+  '일본어 회화': '일본어', '일본 문화': '일본어', '중국어 회화': '중국어', '중국 문화': '중국어',
+  '한문 고전 읽기': '한문', '언어생활과 한자': '한문',
+};
+
+/* 사회 과목은 대학이 「역사·윤리·일반사회·지리」로 나눠 적기도 합니다. 편제표의 교과 「사회」보다 한 단계 자세한 이름 */
+const SUBAREA = {
+  '현대사회와 윤리': '윤리', '윤리와 사상': '윤리', '윤리문제 탐구': '윤리',
+  '사회와 문화': '일반사회', '정치': '일반사회', '법과 사회': '일반사회', '경제': '일반사회', '사회문제 탐구': '일반사회',
+  '세계시민과 지리': '지리', '도시의 미래 탐구': '지리', '여행지리': '지리',
+  '세계사': '역사', '동아시아 역사 기행': '역사', '역사로 탐구하는 현대 세계': '역사',
+};
+
+/* 과목 이름으로는 없지만 그 교과(군)를 대학이 지정했을 때 — 「과학 교과 6곳」처럼 약한 근거 */
+export function areaMatch(picked, sel, s) {
+  const cands = [SUBAREA[s], sel.school.area[s]].filter(Boolean);
+  let best = null;
+  for (const f of picked) for (const a of cands) {
+    const v = f.subs[a];
+    if (!v || !v.area) continue;
+    if (!best || TIER_RANK[v.t] < TIER_RANK[best.t] || (v.t === best.t && v.n > best.n)) best = { t: v.t, n: v.n, area: a };
+  }
+  return best;
+}
+
+export function planFor(sel, picked, grade, taken) {
+  const TK = new Set(taken || []);
+  const G = groupsFor(sel, grade);
+  const areaOf = g => [...new Set(g.subs.map(s => sel.school.area[s]).filter(Boolean))].join('·');
+  const sems = {};
+  const free = [];
+  /* 등급·대학 수가 같으면 계열에 맞는 교과를 앞에 — 자연·공학·의약은 과학, 나머지는 사회 */
+  const pref = picked.some(f => ['자연', '공학', '의약'].includes(f.gy)) ? '과학' : '사회';
+  const by = (a, b) => TIER_RANK[a.m.t] - TIER_RANK[b.m.t] || (b.m.n || 0) - (a.m.n || 0)
+    || (sel.school.area[b.s] === pref) - (sel.school.area[a.s] === pref);
+  for (const g of G) {
+    const direct = g.subs.map(s => ({ s, m: mergeSub(picked, s), area: '' })).filter(r => r.m).sort(by);
+    /* 이름으로 맞춘 과목이 하나도 없는 묶음만 교과(군) 지정으로 채웁니다 — 근거 대학 둘 이상일 때만 */
+    const viaArea = direct.length ? [] : g.subs
+      .map(s => { const m = areaMatch(picked, sel, s); return m && m.n >= 2 ? { s, m, area: m.area } : null; }).filter(Boolean).sort(by);
+    const rows = direct.concat(viaArea);
+    const S = sems[g.sem] = sems[g.sem] || [];
+    if (!rows.length) { free.push({ g: g.g, area: areaOf(g), sem: g.sem }); continue; }
+    const take = rows.slice(0, g.pick).map(r => ({
+      s: r.s, n: r.m.n, t: r.m.t, area: r.area,
+      /* 이름으로 지정된 핵심이고 근거 대학이 둘 이상이면 채운 칸, 교과(군) 지정이면 점선, 아니면 테두리만 */
+      k: r.area ? 'area' : ((r.m.t === 'core' && r.m.n >= 2) ? 'core' : 'opt'),
+      pre: PREREQ[r.s] && !sel.school.common.some(c => c.s === PREREQ[r.s]) ? PREREQ[r.s] : '',
+      gap: grade === 2 && taken && PREREQ[r.s] && !TK.has(PREREQ[r.s]) && !sel.school.common.some(c => c.s === PREREQ[r.s]),
+    }));
+    const rest = rows.slice(g.pick).filter(r => !r.area);   // 자리가 모자라 못 넣은, 이름으로 지정된 과목
+    const others = g.subs.filter(s => !rows.slice(0, g.pick).some(r => r.s === s));
+    const otherArea = [...new Set(others.map(s => sel.school.area[s]).filter(Boolean))].join('·');
+    S.push({ g: g.g, pick: g.pick, take, rest, spare: Math.max(0, g.pick - take.length), otherArea });
+  }
+  /* 3학년 미리 보기 — 1학년이 2학년을 고를 때만. 핵심·권장 위주로 다섯 개까지 */
+  let preview = null;
+  if (grade === 1) {
+    const rows = [];
+    for (const g of groupsFor(sel, 2)) for (const s of g.subs) {
+      const m = mergeSub(picked, s);
+      if (m && (m.t === 'core' || m.t === 'rec') && !rows.some(r => r.s === s)) rows.push({ s, m, sem: g.sem });
+    }
+    rows.sort(by);
+    /* 근거 대학 둘 이상인 것부터, 셋이 안 되면 한 곳짜리도 */
+    const strong = rows.filter(r => r.m.n >= 2);
+    const top = (strong.length >= 3 ? strong : rows).slice(0, 6);
+    const pres = [...new Set(top.map(r => PREREQ[r.s]).filter(Boolean))];
+    preview = { subs: top.map(r => ({ s: r.s, n: r.m.n, sem: r.sem })), pres };
+  }
+  return { sems, free, preview };
+}
