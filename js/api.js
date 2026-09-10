@@ -42,7 +42,7 @@ function authError(msg) {
   return e;
 }
 
-/* 5개년 자료 전체 내려받기 */
+/* 지원결과 자료 전체 내려받기 */
 export async function fetchData(key, onProgress) {
   onProgress?.('자료를 받는 중');
   const res = await fetch(url({ k: key }));

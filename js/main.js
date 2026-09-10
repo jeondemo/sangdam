@@ -32,7 +32,7 @@ const S = {
   mode: 'susi',   // 'susi' | 'jg'
   cut: null,      // 정시 배치기준표 (대학 공개 입시결과)
   cutVersion: null,
-  school: null,   // 우리 학교 5개년 정시 지원 집계
+  school: null,   // 우리 학교 졸업생 정시 지원 집계
   cases: [],      // 현재 화면의 유사 학생 사례 — 목록과 「크게 보기」가 함께 씁니다
   jg: null,       // 정시 지원가능 자료 (대학 공개 정시 결과 + 반영 방식)
   jgVersion: null,
@@ -56,6 +56,23 @@ const LEFT = () => `<div>
   <div class="cv-motto"><div class="m">${esc(SCHOOL.motto[0])}</div><div class="m"><b>${esc(SCHOOL.motto[1])}</b></div></div>
 </div>`;
 
+/* 대상 연도 — 실제로 들어온 학년도로 칸을 만듭니다.
+   자료가 한 해 늘면 「전체」 칸도 같이 늘고, 각 칸에 어느 해가 들어가는지 그대로 적어 둡니다. */
+function fillYears() {
+  const el = $('yrs'), ys = S.history?.meta?.years || [];
+  if (!el || ys.length < 2) return;
+  const last = ys[ys.length - 1];
+  const want = [...new Set([3, 5, ys.length])].filter(n => n <= ys.length).sort((a, b) => a - b);
+  const cur = +el.value;
+  el.innerHTML = want.map(n => {
+    const all = n >= ys.length;
+    const from = all ? ys[0] : last - n + 1;
+    /* 칸이 좁아 「2022~2026」 대신 뒤 두 자리로 적습니다 */
+    return `<option value="${n}">${all ? '전체' : '최근'} ${n}개년 · ${String(from).slice(2)}~${String(last).slice(2)}</option>`;
+  }).join('');
+  el.value = want.includes(cur) ? cur : (want.includes(5) ? 5 : want[want.length - 1]);
+}
+
 function feats() {
   const el = $('cv-feats');
   if (!el) return;
@@ -63,7 +80,7 @@ function feats() {
   const m = S.history.meta;
   const yr = m?.years?.length ? `${m.years[0]}~${m.years[m.years.length - 1]}학년도` : '자료 없음';
   const rows = [
-    ['5개년', yr],
+    [m?.years?.length ? `${m.years.length}개년` : '지원결과', yr],
     [`${(m?.nApps || 0).toLocaleString()}건`, '수시·정시 지원'],
     ['유사 사례', '내신·수능 기준'],
     ['카드 배분', '전형별 실적'],
@@ -120,7 +137,7 @@ function screenUpload(err) {
   cover(`<div class="cv-main">${LEFT()}
     <div>
       <div class="cv-panel one">
-        <div class="p-head"><span class="p-num">1</span><h2>5개년 지원결과</h2>
+        <div class="p-head"><span class="p-num">1</span><h2>${m.years?.length ? `${m.years.length}개년 ` : ''}지원결과</h2>
           <span class="p-line">지원 ${m.nApps.toLocaleString()}건 · 학생 ${m.nPersons.toLocaleString()}명 —
             자동으로 들어옵니다. 따로 올리실 것 없습니다.</span>
           <span class="p-tag">불러옴</span></div>
@@ -240,7 +257,7 @@ function showApp(mode) {
     return `<i class="when${old ? ' old' : ''}">${t.getFullYear()}.${t.getMonth() + 1}.${t.getDate()} 올림${old ? ' · 오래됨' : ''}</i>`;
   };
   $('sb-scope').innerHTML =
-    `<div class="row"><span>5개년 자료</span><b>지원 ${m.nApps.toLocaleString()}건</b></div>` +
+    `<div class="row"><span>지원결과</span><b>지원 ${m.nApps.toLocaleString()}건</b></div>` +
     (S.roster ? `<div class="row"><span>${gl(S.roster)} 학생부${when(S.roster)}${S.roster.meta.stale ? '<i class="when old">예전 판으로 읽힘 · 다시 올려 주세요</i>' : ''}</span><b class="off">${S.roster.meta.n}명</b></div>` : '') +
     (S.mock ? `<div class="row"><span>${esc(S.mock.meta.label || '모의고사')}${when(S.mock)}</span><b class="off">${S.mock.meta.n}명</b></div>` : '');
   $('m-susi').textContent = S.roster ? `${gl(S.roster)} ${S.roster.meta.n}명`.trim() : '명단 없음';
@@ -1063,6 +1080,7 @@ async function loadHistory() {
   if (cached?.enc) {
     S.history = decode(cached.enc);
     S.version = cached.version;
+    fillYears();
     /* 이 컴퓨터에 남아 있는 자료를 먼저 붙입니다 — 화면이 뜬 뒤에 탭이 뒤늦게 나타나지 않도록.
        새 자료가 있는지는 뒤에서 조용히 확인합니다. */
     await loadCut();
@@ -1077,10 +1095,11 @@ async function loadHistory() {
     }).catch(() => { /* 다음 접속 때 다시 확인합니다 */ });
     return;
   }
-  screenLoading('5개년 지원결과를 불러오는 중', 55);
+  screenLoading('지원결과를 불러오는 중', 55);
   const res = await api.fetchData(S.key);
   S.history = decode(res.data);
   S.version = res.version;
+  fillYears();
   await store.set(store.KEY_DATA, { enc: res.data, version: res.version });
   await loadCut(null);
   await loadJG(null);
@@ -1193,19 +1212,20 @@ async function loadSel(serverVersion) {
   } catch { /* 캐시가 있으면 그대로 씁니다 */ }
 }
 
-/* 관리자가 5개년 자료를 새로 올렸으면 저장만 하지 않고 지금 화면에도 바로 바꿔 끼웁니다.
-   정시·선택 자료는 즉시 바뀌는데 5개년만 다음 접속까지 옛것이면 두 자료가 어긋납니다. */
+/* 관리자가 지원결과 자료를 새로 올렸으면 저장만 하지 않고 지금 화면에도 바로 바꿔 끼웁니다.
+   정시·선택 자료는 즉시 바뀌는데 지원결과만 다음 접속까지 옛것이면 두 자료가 어긋납니다. */
 async function refresh() {
   try {
     const res = await api.fetchData(S.key);
     await store.set(store.KEY_DATA, { enc: res.data, version: res.version });
     S.history = decode(res.data);
     S.version = res.version;
+    fillYears();
     S.index = null; S.school = null;
     if (!$('app').classList.contains('hidden')) {
       S.index = buildIndex(S.history);
       showApp(S.mode);
-      toast('5개년 자료가 새 버전으로 바뀌었습니다.');
+      toast('지원결과 자료가 새 버전으로 바뀌었습니다.');
     }
   } catch { /* 다음 접속 때 다시 시도합니다 */ }
 }

@@ -33,7 +33,7 @@ export const get = key => tx('readonly', s => s.get(key)).catch(() => null);
 export const set = (key, val) => tx('readwrite', s => s.put(val, key)).catch(() => null);
 export const del = key => tx('readwrite', s => s.delete(key)).catch(() => null);
 
-export const KEY_DATA = 'history';     // 5개년 자료 캐시 (익명 — 이름 없음)
+export const KEY_DATA = 'history';     // 지원결과 자료 캐시 (익명 — 이름 없음)
 export const KEY_ROSTER = 'roster';    // 학생 명단 (실명 — 교사가 저장을 선택했을 때만)
 export const KEY_LINK = 'linkkey';     // 접속 링크의 열쇠
 export const KEY_MOCK = 'mock';        // 모의고사 명단 (실명 — 저장을 선택했을 때만)

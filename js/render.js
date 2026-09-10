@@ -445,7 +445,7 @@ export function placementTable(res, opts) {
   <tbody>${rows}</tbody></table></div>
   <div class="note fine">처음에는 <b>적정</b>만 보여 드립니다. 위 칩으로 안정·소신·상향도 볼 수 있습니다.
     판정 기준: 안정 +2 이상 · 적정 0 이상 · 소신 −1.5 이상 · 상향 −3 이상 · 도전 그 아래. 「평균」으로만 공개한 대학은 70%컷보다 0.7 높다고 보고 보정했습니다.
-    「유사」는 이 화면의 유사 졸업생, 「학과」·「대학」은 우리 학교 5개년 정시 지원 전체입니다.</div>`;
+    「유사」는 이 화면의 유사 졸업생, 「학과」·「대학」은 우리 학교 졸업생 정시 지원 전체입니다.</div>`;
 }
 
 /* ── 선택과목 구성 ─────────────────────────────────── */
@@ -875,7 +875,7 @@ export function selUnits(res, st) {
 }
 
 /* ── 정시 배치 (대학 공개 정시 결과 기반) ─────────────
-   판정 옆의 합격률은 우리 학교 5개년 실제 결과로 맞춰 본 값입니다. */
+   판정 옆의 합격률은 우리 학교 졸업생 실제 결과로 맞춰 본 값입니다. */
 
 const JG_HIT = { 안정: 78, 적정: 76, 소신: 53, 상향: 16, 도전: 6 };
 const JG_ORDER = ['안정', '적정', '소신', '상향', '도전'];
@@ -922,7 +922,7 @@ export function jgTable(res, opts = {}) {
         ${chip('all', '전체', res.filter(r => r.judge).length)}
         <input type="search" id="jgq" placeholder="대학·학과 찾기">
       </div>
-      <div class="jghint">칩 아래 %는 <b>우리 학교 5개년 정시 실제 합격률</b>입니다 — 같은 계산을 졸업생 지원 171건에 돌려 맞춰 봤습니다.</div>
+      <div class="jghint">칩 아래 %는 <b>우리 학교 졸업생 정시 실제 합격률</b>입니다 — 같은 계산을 졸업생 지원 171건에 돌려 맞춰 봤습니다.</div>
     </div>
     <div class="tbl-wrap"><table class="jgtbl">
       <thead><tr><th>판정</th><th>대학</th><th>군</th><th>모집단위</th><th class="n">내 점수<i>이 대학 기준</i></th>

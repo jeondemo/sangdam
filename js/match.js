@@ -267,7 +267,7 @@ function judgeByDiff(d0, t) {
   return 4;
 }
 
-/* 우리 학교 5개년 정시 지원 결과를 대학·학과별로 세어 둡니다. */
+/* 우리 학교 졸업생 정시 지원 결과를 대학·학과별로 세어 둡니다. */
 export function schoolJeongsiStats(index) {
   const byUniv = new Map(), byDept = new Map();
   const add = (m, k, pass) => { const o = m.get(k) || { n: 0, h: 0 }; o.n++; if (pass) o.h++; m.set(k, o); };
