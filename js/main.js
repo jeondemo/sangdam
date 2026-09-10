@@ -57,20 +57,22 @@ const LEFT = () => `<div>
 </div>`;
 
 /* 대상 연도 — 실제로 들어온 학년도로 칸을 만듭니다.
-   자료가 한 해 늘면 「전체」 칸도 같이 늘고, 각 칸에 어느 해가 들어가는지 그대로 적어 둡니다. */
+   자료가 한 해 늘면 칸도 한 줄 늘고, 한 해씩 좁혀 갈 수 있게 1년 단위로 놓습니다.
+   기본은 「전부」이고, 선생님이 고른 값은 자료가 새로 와도 그대로 둡니다. */
 function fillYears() {
   const el = $('yrs'), ys = S.history?.meta?.years || [];
   if (!el || ys.length < 2) return;
   const last = ys[ys.length - 1];
-  const want = [...new Set([3, 5, ys.length])].filter(n => n <= ys.length).sort((a, b) => a - b);
-  const cur = +el.value;
+  const want = [];
+  for (let n = ys.length; n >= 2; n--) want.push(n);
+  const cur = el.dataset.set ? +el.value : ys.length;      // 처음에는 전부, 그다음부터는 고른 값 유지
   el.innerHTML = want.map(n => {
-    const all = n >= ys.length;
-    const from = all ? ys[0] : last - n + 1;
     /* 칸이 좁아 「2022~2026」 대신 뒤 두 자리로 적습니다 */
-    return `<option value="${n}">${all ? '전체' : '최근'} ${n}개년 · ${String(from).slice(2)}~${String(last).slice(2)}</option>`;
+    const from = n >= ys.length ? ys[0] : last - n + 1;
+    return `<option value="${n}">최근 ${n}개년 · ${String(from).slice(2)}~${String(last).slice(2)}</option>`;
   }).join('');
-  el.value = want.includes(cur) ? cur : (want.includes(5) ? 5 : want[want.length - 1]);
+  el.value = want.includes(cur) ? cur : ys.length;
+  el.dataset.set = '1';
 }
 
 function feats() {
