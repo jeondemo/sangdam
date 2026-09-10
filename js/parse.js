@@ -680,13 +680,14 @@ export function parseSubjectTable(workbook, XLSX) {
   let nGuide = 0;
   a = sheetRows(workbook, XLSX, SEL_SHEETS.guide);
   if (a) {
-    h = headMap(a, { name: ['학문분야'], see: ['대학이보는것'], miss: ['흔한실수'], src: ['출처'] });
+    h = headMap(a, { name: ['학문분야'], see: ['대학이보는것'], miss: ['흔한실수'], plan: ['추천구성', '추천하는과목구성'], src: ['출처'] });
     if (h) for (let i = h.hi + 1; i < a.length; i++) {
       const f = out.fields[get(a[i], h.col, 'name')];
       if (!f) continue;
       const see = lines(h.col.see != null ? a[i][h.col.see] : ''), miss = lines(h.col.miss != null ? a[i][h.col.miss] : '');
-      if (!see.length && !miss.length) continue;
-      f.guide = { see, miss, src: get(a[i], h.col, 'src') || '' };
+      const plan = h.col.plan != null ? String(a[i][h.col.plan] ?? '').split(/\r?\n/).map(x => x.trim()).filter(Boolean).slice(0, 60) : [];
+      if (!see.length && !miss.length && !plan.length) continue;
+      f.guide = { see, miss, plan, src: get(a[i], h.col, 'src') || '' };
       nGuide++;
     }
   }

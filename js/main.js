@@ -18,7 +18,7 @@ import {
   placement, schoolJeongsiStats,
 } from './match.js';
 import * as R from './render.js';
-import { matchUnits, univKey } from './subject.js';
+import { matchUnits, univKey, parsePlan } from './subject.js';
 import { placementJG } from './jeongsi.js';
 
 const $ = id => document.getElementById(id);
@@ -996,8 +996,14 @@ async function pickSel(file) {
     if (!data.order.length) throw new Error('「학문분야」 시트에서 분야를 찾지 못했습니다.');
     pendingSel = data;
     const m = data.meta;
+    /* 추천 구성(④)을 편제표와 대조 — 틀린 곳은 올리기 전에 보여 줍니다 */
+    m.planErr = [];
+    for (const name of data.order) for (const p of parsePlan(data.fields[name].guide?.plan, data))
+      for (const e of p.errors) m.planErr.push(`${name} ${p.title}: ${e}`);
+    m.nPlanErr = m.planErr.length;
     $('s-parsed').innerHTML = `<b style="color:#e5ebfa">${m.nField}개 학문분야</b> · 권장과목 ${m.nRec.toLocaleString()}건 · 우리 학교 ${m.nSub}과목`
-      + (m.nGuide ? ` · 분야 안내글 ${m.nGuide}개` : ' · <span style="color:#f3c9c9">분야 안내글 없음(「분야안내」 시트)</span>');
+      + (m.nGuide ? ` · 분야 안내글 ${m.nGuide}개` : ' · <span style="color:#f3c9c9">분야 안내글 없음(「분야안내」 시트)</span>')
+      + (m.nPlanErr ? `<br><span style="color:#f3c9c9">추천 구성이 편제표와 안 맞는 곳 ${m.nPlanErr}건 — ${esc(m.planErr.slice(0, 3).join(' / '))}${m.nPlanErr > 3 ? ' …' : ''}</span>` : '');
     $('s-send').disabled = false;
   } catch (e) {
     $('s-parsed').innerHTML = `<span style="color:#ff9c9c">읽지 못했습니다 — ${esc(e.message)}</span>`;

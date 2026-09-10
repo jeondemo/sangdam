@@ -2,7 +2,7 @@
 
 import { isPass, JUDGE } from './match.js';
 import { TIER_NAME, TIER_RANK, mergeSub, feasible, summaryOf, whereOf,
-  sciProgress, isSci, overCore, groupsFor, univKey, semLabel, planFor, PREREQ } from './subject.js';
+  sciProgress, isSci, overCore, groupsFor, univKey, semLabel, planFor, PREREQ, parsePlan } from './subject.js';
 
 /* 학급 코드는 306처럼 「학년+반」 세 자리입니다. 화면에는 「3학년 6반」으로 풉니다. */
 export const clsLabel = c => (c >= 100 ? `${Math.floor(c / 100)}학년 ${c % 100}반` : `${c}반`);
@@ -547,15 +547,19 @@ function guidePane(f, sel, st) {
   const fine = [];
   if (commonCore.length) fine.push(`전원이 듣는 ${[...new Set(commonCore)].join('·')}이 이 분야의 핵심을 이미 채웁니다.<span class="gt src3">학교 편제</span>`);
   if (grade === 1 && f.snu.includes('①')) fine.push('C묶음(제2외국어·한문) 하나로 서울대 유형①은 채워집니다.<span class="gt src1">대학 원문</span>');
-  const plan = `<div class="plan c${cols.length}">${cols.join('')}</div>${fine.map(x => `<p class="fine">${x}</p>`).join('')}`;
+  const plan = `<div class="plan auto c${cols.length}">${cols.join('')}</div>${fine.map(x => `<p class="fine">${x}</p>`).join('')}`;
 
   /* ③ */
   const miss = (f.guide?.miss || []).map(t => `<li>${gline(t)}</li>`);
+
+  /* ④ 추천하는 과목 구성 — 「분야안내」 시트 E칸. 학생이 골라져 있으면 이미 들은 것·안 들은 것을 표시합니다. */
+  const rec = recPlans(f, sel, grade, st.stu);
   const src = `근거 — 대교협 2028 권장과목 ${f.nOwn + f.nGen}개 모집단위(「대학별 원문」 탭)` + (f.snu ? ` · ${SNU_SRC}` : '') + (f.guide?.src ? ` · ${esc(f.guide.src)}` : '');
 
   const body = `<div class="gsec"><div class="gh">① 대학이 보는 것</div>${see.join('')}</div>`
     + `<div class="gsec"><div class="gh">② 우리 학교 편제로 짜면 <small>${grade === 1 ? '1학년 → 2학년 선택' : '2학년 → 3학년 선택'}</small></div>${plan}</div>`
     + (miss.length ? `<div class="gsec"><div class="gh">③ 흔한 실수와 위계</div><ul>${miss.join('')}</ul></div>` : '')
+    + (rec ? `<div class="gsec"><div class="gh">④ 추천하는 과목 구성 <small>상담의 출발점이지 정답이 아닙니다 — 학생과 함께 고칩니다</small></div>${rec}</div>` : '')
     + `<div class="gsrc">${src}</div>`;
   const head = `대교협 ${f.nOwn + f.nGen}곳` + (f.snu ? ` · 서울대 ${f.snu}` : '');
   const memo = f.memo || '';
@@ -564,6 +568,44 @@ function guidePane(f, sel, st) {
     ${memo ? `<div class="memo"><span class="lb">학교 메모</span>${esc(memo)}</div>` : '<div class="memo empty"><span class="lb">학교 메모</span>선택과목.xlsx 「학문분야」 시트의 학교 메모 칸에 적으면 여기에 나옵니다.</div>'}</div>`;
 }
 const SNU_SRC = '서울대 2028 전공 연계 교과 안내';
+
+function recPlans(f, sel, grade, stu) {
+  const plans = parsePlan(f.guide?.plan, sel);
+  if (!plans.length) return '';
+  const TK = stu ? new Set(stu.taken || []) : null;
+  const common = new Set(sel.school.common.map(c => c.s));
+  const now = grade === 1 ? '2' : '3';                       // 지금 고르는 학년
+  const pickOf = (sem, g) => sel.school.groups.find(x => x.sem === sem && x.g === g)?.pick;
+  return plans.map((p, i) => {
+    const rows = i === 0 ? p.rows : p.rows.filter(r => p.own.includes(r.sem + '|' + r.g));
+    const sems = [...new Set(rows.map(r => r.sem))].sort();
+    const taken = new Set([...common, ...(TK || [])]);
+    const cols = sems.map(sem => {
+      const semNo = sem.split('-')[1] || '1', past = sem[0] < now, dim = sem[0] !== now;
+      const lines = rows.filter(r => r.sem === sem).map(r => {
+        const chips = r.subs.map(alts => {
+          const label = alts.map(esc).join(' / ');
+          let cls = 'rec', tail = '';
+          if (TK && past) {                                    // 이미 지난 학기 — 들었는지
+            if (alts.some(x => TK.has(x))) { cls += ' done'; tail = '<i>✓ 이수</i>'; }
+            else { cls += ' skip'; tail = '<i>안 들음</i>'; }
+          } else if (TK) {                                     // 앞으로 고를 학기 — 앞 단계를 실제로 들었는지
+            const pre = PREREQ[alts[0]];
+            if (pre && !taken.has(pre)) { cls += ' gapped'; tail = `<i class="gap">2학년 ${esc(pre)} 안 들음</i>`; }
+          }
+          return `<span class="pc ${cls}">${label}${tail}</span>`;
+        }).join('');
+        const pk = pickOf(sem, r.g);
+        return `<div class="plg"><small>${esc(r.g)}묶음${pk ? ' 택' + pk : ''}</small>${chips}</div>`;
+      }).join('');
+      return `<div class="pl r s${semNo}${dim ? ' dim' : ''}"><div class="plh">${esc(semLabel(sem))}${past && TK ? '<small>이미 지남</small>' : ''}</div>${lines}</div>`;
+    });
+    const notes = p.notes.map(n => `<div class="pln">※ ${esc(n)}</div>`).join('');
+    const errs = p.errors.length ? `<div class="pln err">이 안은 편제표와 맞지 않는 곳이 있습니다 — ${p.errors.map(esc).join(' · ')}</div>` : '';
+    return `<div class="rplan"><div class="rph"><b>${esc(p.title)}</b><span class="gt src2">추천안</span></div>
+      <div class="plan c${Math.min(cols.length, 4)}">${cols.join('')}</div>${notes}${errs}</div>`;
+  }).join('');
+}
 const PREREQ_NAME = s => PREREQ[s] || '';
 
 /* 모든 분야 위에 접혀서 붙는 공통 안내 — 「공통안내」 시트 */

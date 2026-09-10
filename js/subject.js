@@ -231,9 +231,8 @@ export const PREREQ = {
   '물질과 에너지': '화학', '화학 반응의 세계': '화학',
   '세포와 물질대사': '생명과학', '생물의 유전': '생명과학',
   '지구 시스템과학': '지구과학', '행성우주과학': '지구과학',
-  '윤리와 사상': '현대사회와 윤리', '윤리문제 탐구': '현대사회와 윤리',
-  '정치': '사회와 문화', '법과 사회': '사회와 문화', '경제': '사회와 문화', '사회문제 탐구': '사회와 문화',
-  '여행지리': '세계시민과 지리', '역사로 탐구하는 현대 세계': '세계사',
+  '윤리와 사상': '현대사회와 윤리',
+  '정치': '사회와 문화', '법과 사회': '사회와 문화', '경제': '사회와 문화',
   '일본어 회화': '일본어', '일본 문화': '일본어', '중국어 회화': '중국어', '중국 문화': '중국어',
   '한문 고전 읽기': '한문', '언어생활과 한자': '한문',
 };
@@ -304,4 +303,53 @@ export function planFor(sel, picked, grade, taken) {
     preview = { subs: top.map(r => ({ s: r.s, n: r.m.n, sem: r.sem })), pres };
   }
   return { sems, free, preview };
+}
+
+/* ── ④ 추천하는 과목 구성 — 「분야안내」 시트 E칸을 읽습니다 ──
+   【안 이름】 줄로 안을 나누고, 「2-1 B: 과목 · 과목」 줄이 한 묶음, 「/」는 둘 중 하나, ※ 줄은 설명.
+   대안은 기본안과 다른 줄만 적어도 되므로 기본안 위에 덮어서 완성합니다.
+   편제표와 대조해 틀린 곳(없는 과목·자리 초과·중복·위계)을 errors 로 돌려줍니다. */
+export function parsePlan(lines, sel) {
+  const plans = [];
+  let cur = null;
+  for (const raw of lines || []) {
+    const t = String(raw).trim();
+    if (!t) continue;
+    if (t.startsWith('【')) { cur = { title: t.replace(/^【|】$/g, ''), rows: [], notes: [] }; plans.push(cur); continue; }
+    if (!cur) { cur = { title: '기본안', rows: [], notes: [] }; plans.push(cur); }
+    if (/^[※*]/.test(t)) { cur.notes.push(t.replace(/^[※*]\s*/, '')); continue; }
+    const m = /^(\d-\d)\s*([A-Za-z가-힣]+)\s*[:：]\s*(.+)$/.exec(t);
+    if (!m) { cur.notes.push(t); continue; }
+    const subs = m[3].split(/\s*[·,]\s*/).map(x => x.split('/').map(y => y.trim()).filter(Boolean)).filter(x => x.length);
+    cur.rows.push({ sem: m[1], g: m[2].toUpperCase(), subs });
+  }
+  if (!plans.length) return [];
+  const G = {};
+  for (const g of sel.school.groups) G[g.sem + '|' + g.g] = g;
+  const common = new Set(sel.school.common.map(c => c.s));
+  const base = plans[0];
+  return plans.map((p, i) => {
+    /* 대안은 기본안의 줄을 물려받고 자기 줄로 덮습니다 */
+    const rows = i === 0 ? p.rows : base.rows.map(r => p.rows.find(x => x.sem === r.sem && x.g === r.g) || r)
+      .concat(p.rows.filter(r => !base.rows.some(x => x.sem === r.sem && x.g === r.g)));
+    const errors = [], chosen = [];
+    for (const r of rows) {
+      const g = G[r.sem + '|' + r.g];
+      if (!g) { errors.push(`${r.sem} ${r.g}묶음이 편제표에 없습니다`); continue; }
+      const all = g.subs.concat(g.only2 || []);
+      if (r.subs.length > g.pick) errors.push(`${r.sem} ${r.g}묶음은 택${g.pick}인데 ${r.subs.length}과목`);
+      for (const alts of r.subs) {
+        for (const x of alts) if (!all.includes(x)) errors.push(`${r.sem} ${r.g}묶음에 「${x}」가 없습니다`);
+        chosen.push({ sem: r.sem, s: alts[0] });
+      }
+    }
+    const names = chosen.map(c => c.s);
+    for (const n of new Set(names)) if (names.filter(x => x === n).length > 1) errors.push(`「${n}」이 두 번 들어 있습니다`);
+    for (const c of chosen) {
+      const pre = PREREQ[c.s];
+      if (pre && !common.has(pre) && !chosen.some(o => o.s === pre && o.sem < c.sem)) errors.push(`「${c.s}」 앞 단계인 「${pre}」가 없습니다`);
+    }
+    rows.sort((a, b) => a.sem.localeCompare(b.sem) || a.g.localeCompare(b.g));
+    return { title: p.title, rows, notes: p.notes, errors, own: p.rows.map(r => r.sem + '|' + r.g) };
+  });
 }
