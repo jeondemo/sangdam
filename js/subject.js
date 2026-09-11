@@ -366,3 +366,65 @@ export function parsePlan(lines, sel) {
     return { title: p.title, rows, notes: p.notes, errors, own: p.rows.map(r => r.sem + '|' + r.g) };
   });
 }
+
+/* ── 2학년 학생이 이미 고른 과목 읽기 ─────────────────────
+   3학년 과목을 고르러 온 화면에서, 분야를 누르기 전에 「지금 어디에 서 있는지」를 먼저 보여 줍니다.
+   진로를 맞히려 들지 않습니다 — 고른 것을 그대로 세어 주고, 위계로 확실한 것만 말합니다. */
+const BRANCH = {
+  '물리': ['물리학', '역학과 에너지', '전자기와 양자'],
+  '화학': ['화학', '물질과 에너지', '화학 반응의 세계'],
+  '생명': ['생명과학', '세포와 물질대사', '생물의 유전'],
+  '지구': ['지구과학', '지구 시스템과학', '행성우주과학'],
+};
+
+export function readTaken(sel, stu) {
+  const T = new Set(stu?.taken || []);
+  const common = new Set(sel.school.common.map(c => c.s));
+  /* 2학년에 고른 선택과목 — 묶음별로 */
+  const rows = [];
+  for (const g of sel.school.groups.filter(x => x.sem[0] === '2'))
+    for (const s of g.subs) if (T.has(s)) rows.push({ sem: g.sem, g: g.g, s, area: sel.school.area[s] || '' });
+  const inB = rows.filter(x => x.g === 'B');
+  const sci = inB.filter(x => x.area === '과학').map(x => x.s);
+  const soc = inB.filter(x => x.area === '사회').map(x => x.s);
+  /* 갈래 — 일반선택에서 진로선택으로 이었는지 */
+  const branch = Object.entries(BRANCH)
+    .map(([k, v]) => ({ k, gen: T.has(v[0]), car: T.has(v[1]), next: v[2], done: T.has(v[2]) }))
+    .filter(x => x.gen || x.car);
+  /* 3학년 과목 중 앞 단계가 필요한 것 — 열렸는지 막혔는지 */
+  const open = [], shut = [], lang = [], seen = new Set();
+  for (const g of groupsFor(sel, 2))
+    for (const s of g.subs.concat(g.only2 || [])) {
+      const pre = PREREQ[s];
+      if (!pre || seen.has(s)) continue;
+      seen.add(s);
+      const ok = T.has(pre) || common.has(pre);
+      /* 어학은 2학년에 고른 언어를 잇는 것뿐이라 진로 판단과 무관합니다 — 따로 한 줄로 */
+      if (['제2외국어', '한문'].includes(sel.school.area[s])) { if (ok) lang.push({ s, pre }); continue; }
+      (ok ? open : shut).push({ s, pre });
+    }
+  const rank = x => (sel.school.area[x.s] === '과학' ? 0 : 1);
+  open.sort((a2, b2) => rank(a2) - rank(b2));
+  shut.sort((a2, b2) => rank(a2) - rank(b2));
+  const tilt = sci.length >= 5 ? 'sci' : (soc.length >= 5 ? 'soc' : 'mix');
+  return { rows, inB, sci, soc, branch, open, shut, lang, tilt, prog: sciProgress([...T]), n: T.size };
+}
+
+/* 이 학생의 2학년 선택과 「추천 구성」의 2학년 B묶음이 얼마나 겹치는지 — 분야 후보용.
+   A묶음(예술)·C묶음(어학)은 진로 신호가 아니라 빼고 셉니다. */
+export function fitFields(sel, stu) {
+  const T = new Set(stu?.taken || []);
+  const out = [];
+  for (const n of sel.order) {
+    const f = sel.fields[n];
+    let best = null;
+    for (const p of parsePlan(f.guide?.plan, sel)) {
+      const subs = p.rows.filter(r => r.sem[0] === '2' && r.g === 'B').flatMap(r => r.subs);
+      if (!subs.length) continue;
+      const hit = subs.filter(a => a.some(x => T.has(x))).length;
+      if (!best || hit / subs.length > best.r) best = { r: hit / subs.length, hit, tot: subs.length };
+    }
+    if (best) out.push({ n, gy: f.gy, ...best });
+  }
+  return out.sort((a, b) => b.r - a.r || b.hit - a.hit || a.n.localeCompare(b.n));
+}

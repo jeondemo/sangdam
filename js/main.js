@@ -533,10 +533,21 @@ function runSel() {
     + ` · 우리 학교 개설 ${m.nSub || 0}과목`;
   $('seltitle').textContent = SEL.grade === 1 ? '2학년 과목 고르기' : '3학년 과목 고르기';
   if (!SEL.picked.length) {
+    /* 2학년 학생을 골랐으면 분야를 누르기 전에 「지금 어디에 서 있는지」부터 보여 줍니다 */
+    if (SEL.grade === 2 && SEL.stu) {
+      $('placeholder').classList.add('hidden');
+      $('selview').classList.remove('hidden');
+      $('s-pick').innerHTML = R.guessPane(S.sel, SEL.stu, S.choice);
+      $('s-cond').innerHTML = '';
+      $('s-miss').innerHTML = '';
+      $('c-scond').textContent = '';
+      $('c-smiss').textContent = '';
+      return;
+    }
     $('selview').classList.add('hidden');
     $('placeholder').classList.remove('hidden');
     $('placeholder').innerHTML = '왼쪽에서 <b>희망 분야</b>를 고르면 그 분야가 요구하는 과목이 우리 학교 편제 위에 표시됩니다.'
-      + '<br><span class="fine">분야는 최대 3개까지 함께 볼 수 있습니다.</span>';
+      + '<br><span class="fine">분야를 누르면 갈아탑니다 — 둘·셋을 나란히 보려면 「분야 비교」를 켜세요.</span>';
     return;
   }
   $('placeholder').classList.add('hidden');
@@ -1418,6 +1429,8 @@ document.querySelectorAll('#seltabs .tab').forEach(t => t.addEventListener('clic
   selTab(t.dataset.s); toTop($('seltabs'));
 }));
 $('s-pick').addEventListener('click', e => {
+  const gf = e.target.closest('.fitc[data-f]');
+  if (gf) return selPick(gf.dataset.f);
   const sub = e.target.closest('.sub[data-s]');
   if (sub) { const k = sub.dataset.s; SEL.chosen.has(k) ? SEL.chosen.delete(k) : SEL.chosen.add(k); return runSel(); }
   const more = e.target.closest('.more[data-m]');

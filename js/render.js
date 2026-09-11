@@ -2,7 +2,8 @@
 
 import { isPass, JUDGE } from './match.js';
 import { TIER_NAME, TIER_RANK, mergeSub, feasible, summaryOf, whereOf,
-  sciProgress, isSci, overCore, groupsFor, univKey, semLabel, planFor, PREREQ, parsePlan, clashPairs } from './subject.js';
+  sciProgress, isSci, overCore, groupsFor, univKey, semLabel, planFor, PREREQ, parsePlan, clashPairs,
+  readTaken, fitFields } from './subject.js';
 
 /* 학급 코드는 306처럼 「학년+반」 세 자리입니다. 화면에는 「3학년 6반」으로 풉니다. */
 export const clsLabel = c => (c >= 100 ? `${Math.floor(c / 100)}학년 ${c % 100}반` : `${c}반`);
@@ -612,6 +613,86 @@ function guidePane(f, sel, st) {
     ${memo ? `<div class="memo"><span class="lb">학교 메모</span>${esc(memo)}</div>` : '<div class="memo empty"><span class="lb">학교 메모</span>선택과목.xlsx 「학문분야」 시트의 학교 메모 칸에 적으면 여기에 나옵니다.</div>'}</div>`;
 }
 const SNU_SRC = '서울대 2028 전공 연계 교과 안내';
+
+/* ── 2학년 학생을 골랐는데 아직 분야를 안 눌렀을 때 ──────────────
+   진로를 맞히지 않습니다. 고른 것을 세어 주고, 위계로 확실한 것만 말한 다음,
+   맞는 분야를 「후보」로만 내놓아 선생님이 한 번 눌러 들어가게 합니다. */
+export function guessPane(sel, stu, choice) {
+  const r = readTaken(sel, stu);
+  if (!r.inB.length) return '<div class="empty">이 학생의 2학년 선택 기록이 없습니다. 왼쪽에서 <b>희망 분야</b>를 골라 주세요.</div>';
+  const cls = a => a === '과학' ? 'sci' : (a === '사회' ? 'soc' : 'etc');
+
+  /* ① 2학년에 들은 과목 — 학기 상자 + 묶음별 칩. 과학·사회를 색으로 갈라 한눈에 보이게 */
+  const semBox = sem => {
+    const list = r.rows.filter(x => x.sem === sem);
+    if (!list.length) return '';
+    const by = {};
+    for (const x of list) (by[x.g] = by[x.g] || []).push(x);
+    const order = { B: 0, C: 1, A: 2 };
+    const gs = Object.keys(by).sort((a, b) => (order[a] ?? 9) - (order[b] ?? 9) || a.localeCompare(b)).map(g =>
+      `<div class="plg"><small>${esc(g)}묶음</small>`
+      + by[g].map(x => `<span class="pc tk ${cls(x.area)}">${esc(x.s)}</span>`).join('') + '</div>').join('');
+    return `<div class="pl s${esc(sem.split('-')[1] || '1')}"><div class="plh">${esc(semLabel(sem))}</div>${gs}</div>`;
+  };
+  const seg = (n, k, t) => n ? `<span class="${k}" style="flex:${n}">${t} ${n}</span>` : '';
+  const bar = `<div class="tkbar">${seg(r.sci.length, 'sci', '과학')}${seg(r.soc.length, 'soc', '사회')}</div>`;
+  const tiltTxt = { sci: '자연·공학·의약 쪽으로 넓게 열어 둔 구성', soc: '인문·사회 쪽으로 모은 구성',
+    mix: '문·이과 어느 쪽으로도 기울지 않은 구성 — 3학년 선택이 진로를 정하게 됩니다' }[r.tilt];
+  const brs = r.branch.length ? `<div class="gt-brs"><span class="lb">과학 갈래</span>` + r.branch.map(b =>
+    `<span class="gt-br ${b.gen && b.car ? 'on' : ''}">${esc(b.k)}<i>${b.gen && b.car ? '일반 → 진로' : (b.car ? '진로만' : '일반만')}</i></span>`).join('') + '</div>' : '';
+
+  /* ② 3학년에 할 수 있는 것 — 열린 길과 막힌 길을 두 칸으로 */
+  const chips = (list, k) => list.map(x => k === 'no'
+    ? `<span class="pc noo">${esc(x.s)}<i>2학년 ${esc(x.pre)} 안 들음</i></span>`
+    : `<span class="pc rec">${esc(x.s)}</span>`).join('') || '<span class="none">없습니다</span>';
+  const p = r.prog;
+  const dots = [0, 1, 2].map(i2 => `<i class="${i2 < p.car.length ? 'on' : ''}"></i>`).join('');
+  const snu = `<div class="snubar"><span class="lb">서울대 유형② <b>과학 진로선택 3과목</b></span>${dots}`
+    + `<b class="v">${Math.min(p.car.length, 3)} / 3</b>`
+    + `<span class="fine">${p.car.length >= 3 ? '이미 채웠습니다' : `3학년에 ${p.need}과목 더`}</span></div>`;
+  const langTxt = r.lang.length
+    ? `<div class="fine ln">C묶음은 2학년에 고른 ${esc(r.lang[0].pre)}${josa(r.lang[0].pre, '을', '를')} 이어 <b>${r.lang.map(x => esc(x.s)).join(' · ')}</b>로 갑니다.</div>` : '';
+
+  /* ③ 이 선택과 맞는 분야 — 겹침을 막대로. 하나로 좁히지 않습니다 */
+  const all = fitFields(sel, stu);
+  const FREE = '자유전공·무전공';
+  const free = all.find(x => x.n === FREE);
+  const rank = all.filter(x => x.n !== FREE && x.r >= 0.5);
+  const top = rank.length ? rank[0].r : 0;
+  const tied = rank.filter(x => x.r >= top - 0.001);
+  const more = rank.filter(x => x.r < top - 0.001).slice(0, 6);
+  const card = (x, k) => `<button class="fitc ${k}" data-f="${esc(x.n)}">
+    <span class="nm">${esc(x.n)}</span><span class="gy">${esc(x.gy)}</span>
+    <span class="fb"><i style="width:${Math.round(x.r * 100)}%"></i></span>
+    <span class="n">${x.hit}<small>/${x.tot}</small></span></button>`;
+  const fields = !rank.length
+    ? '<p>이 선택과 뚜렷하게 맞는 분야를 찾지 못했습니다. 왼쪽에서 직접 골라 주세요.</p>'
+    : `<div class="fith"><b>${Math.round(top * 100)}% 겹치는 분야 ${tied.length}개</b>`
+      + `<span>${tied.length > 1 ? '2학년 선택만으로는 이 안에서 갈리지 않습니다 — 학생에게 물어보고 골라 주세요'
+        : '많이 겹친다고 그 분야를 지망한다는 뜻은 아닙니다'}</span></div>`
+      + `<div class="fits">${tied.map(x => card(x, 'top')).join('')}</div>`
+      + (more.length ? `<div class="fith sub"><b>그다음</b></div><div class="fits">${more.map(x => card(x, 'sub')).join('')}</div>` : '');
+  const freeTxt = free && free.r >= 0.6
+    ? `<div class="freeln"><button class="fitc free" data-f="${esc(FREE)}"><span class="nm">${esc(FREE)}</span>
+       <span class="gy">자유전공</span><span class="fb"><i style="width:${Math.round(free.r * 100)}%"></i></span>
+       <span class="n">${free.hit}<small>/${free.tot}</small></span></button>
+       <span class="fine">인문·자연 두 갈래를 모두 담고 있어 어떤 선택과도 잘 맞습니다 — 순위에서는 빼 두었습니다.</span></div>` : '';
+
+  return `<div class="pane guess"><div class="ph"><span class="bar"></span><span class="tt">2학년에 고른 과목 읽기</span>
+      <span class="sub">${esc(stu?.cls ? stu.cls + '반 ' + stu.no + '번' : '')}</span>
+      <span class="src">분야를 고르기 전에</span></div>
+    <div class="pb">
+      <div class="gsec"><div class="gh">① 2학년에 들은 과목</div>
+        <div class="plan c2">${['2-1', '2-2'].map(semBox).join('')}</div>
+        <div class="tksum">${bar}<span class="tt">${esc(tiltTxt)}</span></div>${brs}</div>
+      <div class="gsec"><div class="gh">② 3학년에 할 수 있는 것</div>${snu}
+        <div class="ways"><div class="way ok"><div class="wh">들을 수 있습니다</div>${chips(r.open, 'ok')}</div>
+          <div class="way no"><div class="wh">못 듭니다</div>${chips(r.shut, 'no')}</div></div>${langTxt}</div>
+      <div class="gsec"><div class="gh">③ 이 선택과 맞는 분야 <small>누르면 그 분야 기준으로 3학년 선택이 펼쳐집니다</small></div>${fields}${freeTxt}</div>
+      <div class="gt-warn">2학년에 고른 과목만으로 진로를 단정할 수 없습니다. 반드시 학생에게 확인하고 분야를 고르세요.</div>
+    </div></div>`;
+}
+
 
 /* ③ 추천하는 과목 구성 — 안이 여럿이면 탭으로 보여 줍니다.
    추천 1이 기준이고, 2·3은 추천 1에서 바뀐 과목만 주황색으로 표시합니다.

@@ -863,3 +863,86 @@ table.jgtbl td.b{font-weight:700}
 /* ② 서로 바꿔 넣어도 되는 자리 — 「A 또는 B 또는 C」 */
 .pc.alt b{font-weight:700;font-size:11px;opacity:.55;margin:0 5px}
 .pc.alt i{display:block;margin:1px 0 0;opacity:.85}
+
+/* 2학년 학생을 골랐을 때 맨 처음 뜨는 「고른 과목 읽기」 카드 */
+.pane.guess .gt-sem{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin:0 0 6px}
+.pane.guess .gt-sem>b{font-size:12px;color:#3b4d78;min-width:82px}
+.gt-g{font-size:12px;color:#5b6b83;font-weight:700}
+.gt-g i{font-style:normal;font-weight:600;color:#2d3b5e;margin-left:5px}
+.gt-brs{margin:4px 0 0;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.gt-brs .lb,.gt-ok .lb,.gt-no .lb,.gt-fs .lb{display:inline-block;font-size:10.5px;font-weight:800;color:#8a94a6;margin-right:4px}
+.gt-br{display:inline-block;font-size:11.5px;font-weight:800;color:#2d3b5e;background:#eef2fa;border-radius:8px;padding:3px 9px}
+.gt-br i{font-style:normal;font-weight:600;font-size:10.5px;color:#5b6b83;margin-left:5px}
+.gt-ok,.gt-no{margin:4px 0}
+.pane.guess .gsec p{margin:6px 0 0}
+.gt-fs{margin:6px 0 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.gt-fs.sub{margin-top:8px;padding-top:8px;border-top:1px dashed #e3e8f1}
+.gt-f{font:inherit;cursor:pointer;font-size:12.5px;font-weight:800;color:#3e2f8a;background:#f1edfd;
+  border:1.5px solid #c9bcf3;border-radius:8px;padding:5px 11px;line-height:1.4}
+.gt-f:hover{background:#e7e0fb}
+.gt-f i{font-style:normal;font-weight:600;font-size:10.5px;opacity:.7;margin-left:5px}
+.gt-f.mini{font-size:11.5px;padding:3px 9px;vertical-align:1px}
+.gt-warn{margin-top:10px;padding-top:8px;border-top:1px dashed #e3e8f1;font-size:11.5px;color:#8a5300}
+
+/* ① 2학년에 들은 과목 — 과학·사회를 색으로 갈라 둡니다 */
+.pc.tk{font-weight:700;font-size:12px;padding:4px 9px;border:1.5px solid transparent}
+.pc.tk.sci{background:#e8f1fb;border-color:#bcd6f0;color:#1c4f83}
+.pc.tk.soc{background:#f3eefc;border-color:#d3c6ee;color:#4b3392}
+.pc.tk.etc{background:#f4f6fa;border-color:#e1e6ef;color:#6b7a90}
+.tksum{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 0}
+.tkbar{display:flex;flex:0 1 260px;min-width:180px;height:22px;border-radius:7px;overflow:hidden;font-size:11px;font-weight:800;color:#fff}
+.tkbar span{display:flex;align-items:center;justify-content:center;white-space:nowrap;min-width:58px;padding:0 4px}
+.tkbar .sci{background:#3d7ebd}
+.tkbar .soc{background:#7a63c6}
+.tksum .tt{font-size:12.5px;font-weight:700;color:#2d3b5e}
+.gt-br.on{background:#e4f4ea;color:#1f6b3d}
+.gt-br.on i{color:#2c7a4d}
+
+/* ② 3학년에 할 수 있는 것 */
+.snubar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:#f6f8fc;border:1px solid #e3e8f1;
+  border-radius:9px;padding:7px 11px;margin:0 0 8px}
+.snubar .lb{font-size:11.5px;color:#5b6b83;font-weight:700}
+.snubar i{width:11px;height:11px;border-radius:50%;background:#dde3ee;display:inline-block}
+.snubar i.on{background:#3d7ebd}
+.snubar .v{font-size:12px;color:#1c4f83}
+.snubar .fine{margin-left:2px}
+.ways{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:820px){.ways{grid-template-columns:1fr}}
+.way{border:1px solid #e3e8f1;border-radius:10px;padding:8px 10px 4px}
+.way .wh{font-size:11.5px;font-weight:800;margin-bottom:6px}
+.way.ok{background:#fafcff;border-color:#dbe7f5}
+.way.ok .wh{color:#2c7a4d}
+.way.no{background:#fffafa;border-color:#f0dede}
+.way.no .wh{color:var(--pass)}
+.way .none{font-size:12px;color:#9aa4b5}
+.ln{margin-top:8px}
+
+/* ③ 이 선택과 맞는 분야 */
+.fith{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:0 0 7px}
+.fith b{font-size:13px;color:#2d3b5e}
+.fith span{font-size:11.5px;color:#5b6b83}
+.fith.sub{margin-top:12px;padding-top:9px;border-top:1px dashed #e3e8f1}
+.fits{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:7px}
+.fitc{font:inherit;cursor:pointer;text-align:left;display:grid;
+  grid-template-columns:1fr auto;grid-template-areas:'nm gy' 'fb n';gap:3px 8px;align-items:center;
+  background:#fff;border:1.5px solid #c9bcf3;border-radius:10px;padding:8px 11px}
+.fitc:hover{background:#f6f3fe}
+.fitc .nm{grid-area:nm;font-size:13px;font-weight:800;color:#3e2f8a}
+.fitc .gy{grid-area:gy;font-size:10.5px;font-weight:700;color:#8a94a6}
+.fitc .fb{grid-area:fb;display:block;width:auto;height:6px;border-radius:99px;background:#eceff5;overflow:hidden}
+.fitc .fb i{display:block;height:100%;background:#8e79e0;border-radius:99px}
+.fitc .n{grid-area:n;font-size:11.5px;font-weight:800;color:#5b47a8}
+.fitc .n small{font-weight:600;opacity:.65}
+.fitc.sub{border-color:#e1e6ef}
+.fitc.sub .nm{color:#4a5670}
+.fitc.sub .fb i{background:#b9b2d8}
+.fitc.free{border-color:#cfd8e6;max-width:240px}
+.freeln{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:9px;border-top:1px dashed #e3e8f1}
+.freeln .fine{flex:1 1 240px}
+/* 읽기 카드 안에서는 묶음 라벨을 칩 옆에 붙여 한 줄로 압축합니다 */
+.pane.guess .plg{display:flex;align-items:baseline;gap:4px 8px;flex-wrap:wrap;margin-bottom:5px}
+.pane.guess .plg small{display:inline-block;margin:0;min-width:44px;flex:0 0 auto}
+.pane.guess .pc{margin:0 4px 4px 0}
+.pane.guess .pl{padding:10px 12px 8px}
+.pane.guess .gsec{margin-top:14px}
+.pane.guess .gsec:first-child{margin-top:0}
