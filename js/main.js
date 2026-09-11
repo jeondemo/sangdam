@@ -537,7 +537,8 @@ function runSel() {
     if (SEL.grade === 2 && SEL.stu) {
       $('placeholder').classList.add('hidden');
       $('selview').classList.remove('hidden');
-      $('s-pick').innerHTML = R.guessPane(S.sel, SEL.stu, S.choice);
+      $('s-pick').innerHTML = R.stuStrip(SEL.stu, SEL.grade, '2학년에 고른 과목을 그대로 읽어 정리했습니다')
+        + R.guessPane(S.sel, SEL.stu, S.choice);
       $('s-cond').innerHTML = '';
       $('s-miss').innerHTML = '';
       $('c-scond').textContent = '';

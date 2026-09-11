@@ -617,6 +617,16 @@ const SNU_SRC = '서울대 2028 전공 연계 교과 안내';
 /* ── 2학년 학생을 골랐는데 아직 분야를 안 눌렀을 때 ──────────────
    진로를 맞히지 않습니다. 고른 것을 세어 주고, 위계로 확실한 것만 말한 다음,
    맞는 분야를 「후보」로만 내놓아 선생님이 한 번 눌러 들어가게 합니다. */
+/* 학생을 고른 화면 맨 위에 붙는 이름표 — 「2학년 2반 8번 안주현 학생」.
+   실명은 선생님 브라우저 안에서만 쓰입니다(서버로 보내지 않습니다). */
+export function stuStrip(stu, grade, note) {
+  if (!stu) return '';
+  const c = Number(stu.cls);
+  const where = c >= 100 ? clsLabel(c) : `${grade}학년 ${c}반`;
+  return `<div class="stuline"><span class="who"><b>${esc(`${where} ${stu.no}번 ${stu.nm || ''}`.trim())}</b> 학생</span>`
+    + (note ? `<span class="fine">${esc(note)}</span>` : '') + '</div>';
+}
+
 export function guessPane(sel, stu, choice) {
   const r = readTaken(sel, stu);
   if (!r.inB.length) return '<div class="empty">이 학생의 2학년 선택 기록이 없습니다. 왼쪽에서 <b>희망 분야</b>를 골라 주세요.</div>';
@@ -679,7 +689,6 @@ export function guessPane(sel, stu, choice) {
        <span class="fine">인문·자연 두 갈래를 모두 담고 있어 어떤 선택과도 잘 맞습니다 — 순위에서는 빼 두었습니다.</span></div>` : '';
 
   return `<div class="pane guess"><div class="ph"><span class="bar"></span><span class="tt">2학년에 고른 과목 읽기</span>
-      <span class="sub">${esc(stu?.cls ? stu.cls + '반 ' + stu.no + '번' : '')}</span>
       <span class="src">분야를 고르기 전에</span></div>
     <div class="pb">
       <div class="gsec"><div class="gh">① 2학년에 들은 과목</div>
@@ -959,7 +968,9 @@ export function selPanel(sel, st) {
     ? `<div class="moretog" data-sum="1">▼ 분야별 안내 ${picked.length}개 보기</div>`
     : sum + (picked.length > 1 ? '<div class="moretog" data-sum="1">▲ 분야별 안내 접기</div>' : ''));
 
-  return head
+  const strip = (grade === 2 && st.stu)
+    ? stuStrip(st.stu, grade, '이 학생이 2학년에 들은 과목을 반영해 표시합니다') : '';
+  return strip + head
     + (good.length ? pane('ok', '확인된 것', good.join('<br>')) : '')
     + (warn.length ? pane('warn', '짚어야 할 것', warn.join('<br>')) : '')
     + (grade === 2 && st.stu ? takenBlock(sel, picked, st.stu, choice, TK) : '')
