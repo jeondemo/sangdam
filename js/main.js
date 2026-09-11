@@ -656,9 +656,11 @@ function selPick(name) {
   const f = S.sel.fields[name];
   if (!f) return;
   const i = SEL.picked.findIndex(p => p.name === name);
+  /* 기본은 「갈아타기」 — 누를 때마다 쌓이면 상담 중에 분야가 뒤엉킵니다.
+     둘을 나란히 놓고 볼 때만 「분야 비교」를 켜서 3개까지 더합니다. */
   if (i >= 0) SEL.picked.splice(i, 1);
-  else if (SEL.picked.length >= 3) return;
-  else SEL.picked.push(f);
+  else if ($('selcmp')?.checked) { if (SEL.picked.length >= 3) return; SEL.picked.push(f); }
+  else SEL.picked = [f];
   /* 분야가 바뀌면 새 상담입니다. 앞서 눌러 둔 과목은 비우고 빈칸에서 시작합니다. */
   SEL.chosen.clear();
   SEL.openG.clear();
@@ -1388,6 +1390,13 @@ $('selfbox').addEventListener('click', e => {
 });
 $('selpicked').addEventListener('click', e => {
   const b = e.target.closest('button[data-x]'); if (b) selPick(b.dataset.x);
+});
+$('selcmp').addEventListener('change', e => {
+  if (!e.target.checked && SEL.picked.length > 1) {
+    SEL.picked = SEL.picked.slice(0, 1);
+    SEL.chosen.clear(); SEL.openG.clear();
+  }
+  selPaint();
 });
 $('selq').addEventListener('input', () => {
   if (S.sel) $('selfbox').innerHTML = R.fieldList(S.sel, SEL.picked, ($('selq').value || '').trim());

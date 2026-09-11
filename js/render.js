@@ -488,14 +488,17 @@ export function pickedChips(picked) {
 
 /* ── 분야 안내 ──────────────────────────────────────
    ① 대학이 보는 것 — 표의 숫자로 만든 문장 + 선택과목.xlsx 「분야안내」의 문장
-   ② 우리 학교 편제로 짜면 — planFor()가 권장과목·편제표로 계산 (글 없음)
-   ③ 흔한 실수와 위계 — 「분야안내」의 문장
-   줄 앞 ●◐○◆ 는 꼬리표로 바뀝니다. 남의 문장은 넣지 않고 우리 말로 정리한 것만 들어 있습니다. */
-const GTAG = { '●': ['대학 원문', 'src1'], '◐': ['대학 안내서', 'src1'], '○': ['강의 정리', 'src2'], '◆': ['학교 편제', 'src3'] };
+   ② 우리 학교 편제로 짜면 — planFor()가 권장과목·편제표로 계산한 묶음별 메뉴 (글 없음)
+   ③ 추천하는 과목 구성 — 「분야안내」 E칸의 3년 설계
+   ④ 흔한 실수와 위계 — 「분야안내」의 문장, 짧게
+   남의 문장은 넣지 않고 우리 말로 정리한 것만 들어 있습니다. */
+const GTAG = { '●': 1, '◐': 1, '○': 1, '◆': 1 };
+/* 줄 앞의 ● ◐ ○ ◆ 는 자료 종류를 적어 두려고 쓰는 표시입니다.
+   화면에는 떼고 내보냅니다 — 문장마다 출처 딱지를 붙이면 남의 자료를 그대로 옮긴 것처럼 보입니다.
+   출처는 분야 맨 아래 「근거 —」 한 줄로 한 번만 밝힙니다. */
 function gline(t) {
-  const m = GTAG[t.charAt(0)];
-  const body = m ? t.slice(1).trim() : t;
-  return esc(body) + (m ? `<span class="gt ${m[1]}">${m[0]}</span>` : '');
+  const body = GTAG[t.charAt(0)] ? t.slice(1).trim() : t;
+  return esc(body);
 }
 const SNU_TYPE = { '①': '유형① — 제2외국어·한문 1과목 이상', '②': '유형② — 기하·미적분Ⅱ + 과학 진로선택 3과목 이상' };
 
@@ -508,16 +511,19 @@ function guidePane(f, sel, st) {
   if (s.topick.length) p.push(`직접 골라야 하는 것은 ${s.topick.map(([k, v]) =>
     `<b>${esc(k)}</b> <span class="fine">(${v.n}곳 · ${esc(WHERE[k] || '')})</span>`).join(', ')}입니다.`);
   if (!p.length) p.push('대학이 이름으로 지정한 과목이 없습니다. 아래 갈래를 참고해 진로에 맞게 고르면 됩니다.');
-  const see = [`<p>${p.join(' ')}<span class="gt src1">대학 원문</span></p>`];
+  const see = [`<p>${p.join(' ')}</p>`];
   if (f.snu) {
     const types = ['①', '②'].filter(k => f.snu.includes(k)).map(k => SNU_TYPE[k]);
     see.push(`<p>서울대는 ${esc(f.snu)}로 봅니다 — ${types.map(esc).join(' / ')}.`
-      + (f.pref ? ` 우선 이수 권장 과목은 <b>${esc(f.pref)}</b>입니다.` : '') + '<span class="gt src1">대학 원문</span></p>');
+      + (f.pref ? ` 우선 이수 권장 과목은 <b>${esc(f.pref)}</b>입니다.` : '') + '</p>');
   }
   for (const t of f.guide?.see || []) see.push(`<p>${gline(t)}</p>`);
 
   /* ② */
   const pl = planFor(sel, picked, grade, st.stu?.taken);
+  const G2 = groupsFor(sel, grade);
+  const gsubs = (sem, g) => (G2.find(x => x.sem === sem && x.g === g) || {}).subs || [];
+  const TKs = (grade === 2 && st.stu) ? new Set(st.stu.taken || []) : null;
   const semKeys = Object.keys(pl.sems).sort();
   const cols = semKeys.map(sem => {
     const semNo = sem.split('-')[1] || '1';
@@ -528,8 +534,21 @@ function guidePane(f, sel, st) {
         return `<span class="pc ${t.k}${t.gap ? ' gapped' : ''}">${esc(t.s)}<i>${meta}</i>${gap}</span>`;
       });
       if (g.spare) chips.push(`<span class="pc free">자유 ${g.spare}과목<i>${esc(g.otherArea || '')}${g.otherArea ? ' 중' : ''}</i></span>`);
-      const alt = g.rest.length ? `<div class="pln">또는 ${g.rest.slice(0, 4).map(r => `${esc(r.s)}(${r.m.n}곳)`).join(' · ')}${g.rest.length > 4 ? ' …' : ''}</div>` : '';
-      return `<div class="plg"><small>${esc(g.g)}묶음 택${g.pick}</small>${chips.join('')}${alt}</div>`;
+      /* 묶음에 든 나머지 과목도 흐리게 다 보여 줍니다 — 「그럼 이 묶음에 또 뭐가 있지?」를 아래까지 내려가 찾지 않게.
+         「들으면 안 되는 과목」은 적지 않습니다. 대학이 낸 것은 권장뿐이고 금지 목록은 없습니다.
+         진짜로 못 듣는 것은 앞 단계를 안 들어 막힌 과목뿐이라, 그것만 따로 적습니다. */
+      const on = new Set(g.take.map(t => t.s));
+      const rest = gsubs(sem, g.g).filter(s => !on.has(s)).map(s => {
+        const m = mergeSub(picked, s);
+        const pre = PREREQ[s] && !sel.school.common.some(c => c.s === PREREQ[s]) ? PREREQ[s] : '';
+        return { s, n: (m && m.n) || 0, pre, block: !!(TKs && pre && !TKs.has(pre)) };
+      }).sort((a, b) => b.n - a.n);
+      const dim = rest.filter(r => !r.block), no = rest.filter(r => r.block);
+      const dimHtml = dim.length ? `<div class="prest"><b>나머지</b>${dim.map(r =>
+        `<span class="pc dimo">${esc(r.s)}${r.n ? `<i>${r.n}곳</i>` : ''}</span>`).join('')}</div>` : '';
+      const noHtml = no.length ? `<div class="prest no"><b>나머지 중 못 듣는 과목</b>${no.map(r =>
+        `<span class="pc noo">${esc(r.s)}<i>2학년 ${esc(r.pre)} 안 들음</i></span>`).join('')}</div>` : '';
+      return `<div class="plg"><small>${esc(g.g)}묶음 택${g.pick}</small>${chips.join('')}${dimHtml}${noHtml}</div>`;
     }).join('');
     const fr = pl.free.filter(x => x.sem === sem);
     const frTxt = fr.length ? `<div class="pln">${fr.map(x => `${esc(x.g)}묶음(${esc(x.area)})`).join('·')}은 이 분야와 관계없으니 자유롭게 고릅니다.</div>` : '';
@@ -545,21 +564,21 @@ function guidePane(f, sel, st) {
   const commonCore = sel.school.common.filter(c => { const m = mergeSub(picked, c.s); return m && (m.t === 'core' || m.t === 'rec'); })
     .map(c => esc(c.s));
   const fine = [];
-  if (commonCore.length) fine.push(`전원이 듣는 ${[...new Set(commonCore)].join('·')}이 이 분야의 핵심을 이미 채웁니다.<span class="gt src3">학교 편제</span>`);
-  if (grade === 1 && f.snu.includes('①')) fine.push('C묶음(제2외국어·한문) 하나로 서울대 유형①은 채워집니다.<span class="gt src1">대학 원문</span>');
+  if (commonCore.length) fine.push(`전원이 듣는 ${[...new Set(commonCore)].join('·')}이 이 분야의 핵심을 이미 채웁니다.`);
+  if (grade === 1 && f.snu.includes('①')) fine.push('C묶음(제2외국어·한문) 하나로 서울대 유형①은 채워집니다.');
   const plan = `<div class="plan auto c${cols.length}">${cols.join('')}</div>${fine.map(x => `<p class="fine">${x}</p>`).join('')}`;
 
-  /* ③ */
+  /* ④ 흔한 실수와 위계 */
   const miss = (f.guide?.miss || []).map(t => `<li>${gline(t)}</li>`);
 
-  /* ④ 추천하는 과목 구성 — 「분야안내」 시트 E칸. 학생이 골라져 있으면 이미 들은 것·안 들은 것을 표시합니다. */
+  /* ③ 추천하는 과목 구성 — 「분야안내」 시트 E칸. 학생이 골라져 있으면 이미 들은 것·안 들은 것을 표시합니다. */
   const rec = recPlans(f, sel, grade, st.stu, st.recTab?.[f.name], st.choice);
   const src = `근거 — 대교협 2028 권장과목 ${f.nOwn + f.nGen}개 모집단위(「대학별 원문」 탭)` + (f.snu ? ` · ${SNU_SRC}` : '') + (f.guide?.src ? ` · ${esc(f.guide.src)}` : '');
 
   const body = `<div class="gsec"><div class="gh">① 대학이 보는 것</div>${see.join('')}</div>`
     + `<div class="gsec"><div class="gh">② 우리 학교 편제로 짜면 <small>${grade === 1 ? '1학년 → 2학년 선택' : '2학년 → 3학년 선택'}</small></div>${plan}</div>`
-    + (miss.length ? `<div class="gsec"><div class="gh">③ 흔한 실수와 위계</div><ul>${miss.join('')}</ul></div>` : '')
-    + (rec ? `<div class="gsec"><div class="gh">④ 추천하는 과목 구성 <small>상담의 출발점이지 정답이 아닙니다 — 학생과 함께 고칩니다</small></div>${rec}</div>` : '')
+    + (rec ? `<div class="gsec"><div class="gh">③ 추천하는 과목 구성 <small>상담의 출발점이지 정답이 아닙니다 — 학생과 함께 고칩니다</small></div>${rec}</div>` : '')
+    + (miss.length ? `<div class="gsec sm"><div class="gh">④ 흔한 실수와 위계</div><ul>${miss.join('')}</ul></div>` : '')
     + `<div class="gsrc">${src}</div>`;
   const head = `대교협 ${f.nOwn + f.nGen}곳` + (f.snu ? ` · 서울대 ${f.snu}` : '');
   const memo = f.memo || '';
@@ -569,7 +588,7 @@ function guidePane(f, sel, st) {
 }
 const SNU_SRC = '서울대 2028 전공 연계 교과 안내';
 
-/* ④ 추천하는 과목 구성 — 안이 여럿이면 탭으로 보여 줍니다.
+/* ③ 추천하는 과목 구성 — 안이 여럿이면 탭으로 보여 줍니다.
    추천 1이 기준이고, 2·3은 추천 1에서 바뀐 과목만 주황색으로 표시합니다.
    2학년 학생을 골랐으면 실제 이수와 가장 가까운 안을 알려 주되,
    두 과목 이상 앞설 때만 — 비슷비슷하면 아무것도 고르지 않습니다. */
@@ -643,7 +662,7 @@ function recPlans(f, sel, grade, stu, cur, choice) {
   const nDiff = diffs.reduce((n, d) => n + Math.max(d.add.length, d.del.length), 0);
   const diffLine = nDiff ? `<div class="rdiff"><b>추천 1과 다른 과목 ${nDiff}개</b> — ${diffs.map(d =>
     `${esc(semLabel(d.sem))} ${d.del.map(esc).join('·') || '없음'} → ${d.add.map(esc).join('·') || '없음'}`).join(' · ')}</div>` : '';
-  const one = plans.length < 2 ? `<div class="rph"><b>${esc(p.title)}</b><span class="gt src2">추천안</span></div>` : '';
+  const one = plans.length < 2 ? `<div class="rph"><b>${esc(p.title)}</b><span class="rtag">추천안</span></div>` : '';
   const notes = p.notes.map(n => `<div class="pln">※ ${esc(n)}</div>`).join('');
 
   /* 추천안이 손대지 않은 묶음 — 학생이 따로 골라야 하는 칸이라 빠뜨리지 않게 알려 둡니다 */
