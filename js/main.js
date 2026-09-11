@@ -146,7 +146,7 @@ function screenUpload(err) {
       </div>
 
       <div class="cv-pair">
-      <div class="cv-panel">
+      <div class="cv-panel two">
         <div class="p-head"><span class="p-num">2</span><h2>학생부성적표 · 수시·정시 상담</h2>${tag(S.roster)}</div>
         <div class="p-hint">내신이 포함된 학생부 성적표를 김영일 컨설팅에서 내려받아 올리면 자동으로 읽습니다.</div>
         ${howto(ROSTER_STEPS)}
@@ -158,7 +158,7 @@ function screenUpload(err) {
         </div>
       </div>
 
-      <div class="cv-panel">
+      <div class="cv-panel three">
         <div class="p-head"><span class="p-num">3</span><h2>모의고사 성적표 · 정시 상담</h2>${tag(S.mock)}</div>
         <div class="p-hint">모의고사 성적을 김영일 컨설팅에 올린 뒤, 김영일 사이트에서 내려받아 여기에 올리면 됩니다.</div>
         ${howto(MOCK_STEPS)}
