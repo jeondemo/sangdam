@@ -501,6 +501,12 @@ function gline(t) {
   return esc(body);
 }
 const SNU_TYPE = { '①': '유형① — 제2외국어·한문 1과목 이상', '②': '유형② — 기하·미적분Ⅱ + 과학 진로선택 3과목 이상' };
+/* 서로 바꿔 넣어도 되는 어학 자리 — 서울대 유형①부터가 「제2외국어·한문 중 1과목」이고,
+   대교협 권장과목 표도 대부분 「한문」·「제2외국어」라는 교과를 적었을 뿐 과목을 고르지 않았습니다.
+   그래서 이 자리만은 순위를 매기지 않습니다. 한 과목을 진하게 세워 두면 그 쪽으로 쏠려
+   실제로는 학생이 고른 것이 아니게 되고, 과목 존치까지 흔들립니다. */
+const LANG_AREA = new Set(['제2외국어', '한문']);
+
 
 function guidePane(f, sel, st) {
   const { picked, grade } = st;
@@ -528,21 +534,40 @@ function guidePane(f, sel, st) {
   const cols = semKeys.map(sem => {
     const semNo = sem.split('-')[1] || '1';
     const groups = pl.sems[sem].map(g => {
-      const chips = g.take.map(t => {
+      const chipOf = t => {
         const meta = t.k === 'area' ? `${esc(t.area)} 교과 ${t.n}곳` : `${t.n}곳`;
         const gap = t.gap ? `<i class="gap">2학년 ${esc(PREREQ_NAME(t.s))} 안 들음</i>` : '';
         return `<span class="pc ${t.k}${t.gap ? ' gapped' : ''}">${esc(t.s)}<i>${meta}</i>${gap}</span>`;
-      });
-      if (g.spare) chips.push(`<span class="pc free">자유 ${g.spare}과목<i>${esc(g.otherArea || '')}${g.otherArea ? ' 중' : ''}</i></span>`);
+      };
       /* 묶음에 든 나머지 과목도 흐리게 다 보여 줍니다 — 「그럼 이 묶음에 또 뭐가 있지?」를 아래까지 내려가 찾지 않게.
          「들으면 안 되는 과목」은 적지 않습니다. 대학이 낸 것은 권장뿐이고 금지 목록은 없습니다.
          진짜로 못 듣는 것은 앞 단계를 안 들어 막힌 과목뿐이라, 그것만 따로 적습니다. */
       const on = new Set(g.take.map(t => t.s));
-      const rest = gsubs(sem, g.g).filter(s => !on.has(s)).map(s => {
+      const all = gsubs(sem, g.g);
+      let rest = all.filter(s => !on.has(s)).map(s => {
         const m = mergeSub(picked, s);
         const pre = PREREQ[s] && !sel.school.common.some(c => c.s === PREREQ[s]) ? PREREQ[s] : '';
-        return { s, n: (m && m.n) || 0, pre, block: !!(TKs && pre && !TKs.has(pre)) };
+        return { s, n: (m && m.n) || 0, t: m && m.t, pre, block: !!(TKs && pre && !TKs.has(pre)) };
       }).sort((a, b) => b.n - a.n);
+      /* 서로 바꿔 넣어도 되는 자리는 순위를 매기지 않고 「A 또는 B」로 묶습니다.
+         대학이 적은 것은 대개 「한문」·「제2외국어」라는 교과이지 과목이 아니고(권장과목 표의 「교과군」),
+         한 과목만 진하게 세워 두면 그 쪽으로 쏠려 실제로는 학생이 고른 것이 아니게 됩니다.
+         근거가 뚜렷이 앞서는 과목이 있으면(핵심 등급이거나 근거 3곳 이상) 그대로 한 과목을 세웁니다. */
+      let alt = (all.length > 1 && all.every(s => LANG_AREA.has(sel.school.area[s])))
+        ? all.filter(s => !rest.some(r => r.s === s && r.block)) : null;
+      if (alt && alt.length < 2) alt = null;
+      const chips = [];
+      if (alt) {
+        const inAlt = g.take.filter(t => alt.includes(t.s));
+        for (const t of g.take) if (!alt.includes(t.s)) chips.push(chipOf(t));
+        const best = [...inAlt].sort((a, b) => TIER_RANK[a.t] - TIER_RANK[b.t])[0];
+        const nSlot = Math.max(inAlt.length, 1);
+        const why = alt.every(s => PREREQ[s]) ? '앞 학기에 고른 것을 그대로 잇습니다' : '어느 것이든 좋습니다';
+        chips.push(`<span class="pc ${best ? best.k : 'opt'} alt">${alt.map(esc).join('<b>또는</b>')}`
+          + `<i>중 ${nSlot}과목 · ${why}</i></span>`);
+        rest = rest.filter(r => !alt.includes(r.s));
+      } else for (const t of g.take) chips.push(chipOf(t));
+      if (g.spare) chips.push(`<span class="pc free">자유 ${g.spare}과목<i>${esc(g.otherArea || '')}${g.otherArea ? ' 중' : ''}</i></span>`);
       const dim = rest.filter(r => !r.block), no = rest.filter(r => r.block);
       const dimHtml = dim.length ? `<div class="prest"><b>나머지</b>${dim.map(r =>
         `<span class="pc dimo">${esc(r.s)}${r.n ? `<i>${r.n}곳</i>` : ''}</span>`).join('')}</div>` : '';

@@ -860,3 +860,6 @@ table.jgtbl td.b{font-weight:700}
 .sbl .cmp{float:right;display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#9fb0cf;cursor:pointer}
 .sbl .cmp input{width:13px;height:13px;margin:0;accent-color:#6f8ad4;cursor:pointer}
 .sbl .cmp small{font-size:10px;font-weight:600;opacity:.65}
+/* ② 서로 바꿔 넣어도 되는 자리 — 「A 또는 B 또는 C」 */
+.pc.alt b{font-weight:700;font-size:11px;opacity:.55;margin:0 5px}
+.pc.alt i{display:block;margin:1px 0 0;opacity:.85}
