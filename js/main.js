@@ -43,7 +43,7 @@ const S = {
 
 /* 과목 선택 화면의 상태 */
 const SEL = { picked: [], grade: 1, chosen: new Set(), openG: new Set(), sumOpen: false, guideOpen: false, recTab: {}, stu: null,
-  uFilter: 'all', uQ: '' };
+  uFilter: 'all', uQ: '', uScope: null };
 let uApps = null;   // 대학 이름 → 우리 학교 6개년 지원 건수
 
 /* ── 표지 조각 ─────────────────────────────────────── */
@@ -597,9 +597,23 @@ function paintUnits() {
     $('c-suniv').textContent = '';
     return;
   }
-  const res = matchUnits(S.sel, selSubs().all);
+  const all = matchUnits(S.sel, selSubs().all);
+  /* 고른 분야의 모집단위만 보여 줍니다 — 의예를 고르고 건축학부가 섞여 나오면 오히려 읽기 어렵습니다.
+     권장과목을 낸 대학이 적은 분야(심리·초등교육 등)는 그 분야의 계열로 넓혀 줍니다. */
+  const names = SEL.picked.map(f => f.name);
+  const gys = [...new Set(SEL.picked.map(f => f.gy).filter(Boolean))];
+  const inF = r => (r.f || []).some(f => names.includes(f));
+  const inG = r => (r.f || []).some(f => gys.includes(S.sel.fields?.[f]?.gy));
+  const nF = names.length ? all.filter(inF).length : 0;
+  const nG = gys.length ? all.filter(inG).length : 0;
+  const auto = !names.length ? 'all' : (nF >= 10 ? 'field' : (nG >= 10 ? 'gy' : 'all'));
+  const scope = SEL.uScope || auto;
+  const res = scope === 'field' ? all.filter(inF) : (scope === 'gy' ? all.filter(inG) : all);
   SEL.uFilter = 'all'; SEL.uQ = '';
-  $('s-univ').innerHTML = R.selUnits(res, { apps: univApps(), nUniv: S.sel.meta?.nUniv, coverage: unitCoverage() });
+  $('s-univ').innerHTML = R.selUnits(res, {
+    apps: univApps(), nUniv: S.sel.meta?.nUniv, coverage: unitCoverage(),
+    scope, auto, nAll: all.length, nField: nF, nGy: nG, fields: names, gys,
+  });
   $('c-suniv').textContent = res.filter(r => r.st === 'full').length;
 }
 
@@ -1445,6 +1459,8 @@ $('s-pick').addEventListener('click', e => {
   if (e.target.closest('#btn-univ')) { selTab('univ'); toTop($('seltabs')); }
 });
 $('s-univ').addEventListener('click', e => {
+  const us = e.target.closest('.chip[data-us]');
+  if (us) { SEL.uScope = us.dataset.us; return paintUnits(); }
   const b = e.target.closest('.chip[data-uf]'); if (!b) return;
   $('s-univ').querySelectorAll('.chip[data-uf]').forEach(c => c.setAttribute('aria-pressed', 'false'));
   b.setAttribute('aria-pressed', 'true'); SEL.uFilter = b.dataset.uf; filterUnits();

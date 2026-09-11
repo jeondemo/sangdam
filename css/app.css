@@ -990,3 +990,10 @@ table.jgtbl td.b{font-weight:700}
 .cv-feat b{font-size:12px}
 .cv-feat span{font-size:9.5px}
 @media(max-width:1220px){.cv-feat{padding:4px 8px}.cv-feat b{font-size:11.5px}.cv-feat span{font-size:9px}}
+
+/* 대학별 결과 — 보는 범위(고른 분야 / 계열 / 전체) */
+.uscope{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:12px 0 0;
+  padding:9px 12px;background:#f6f8fc;border:1px solid #e3e8f1;border-radius:10px}
+.uscope .lb{font-size:11px;font-weight:800;color:#8a94a6;margin-right:2px}
+.uscope .chip{font-size:12.5px}
+.uscope .fine{flex:1 1 240px;margin-left:4px}

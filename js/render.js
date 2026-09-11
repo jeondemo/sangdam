@@ -1047,6 +1047,17 @@ export function selUnits(res, st) {
 
   const chip = (k, label, num) => `<button class="chip" data-uf="${k}" aria-pressed="${k === 'all'}">${label}${num != null ? ` <span class="c">${num}</span>` : ''}</button>`;
 
+  /* 어느 범위를 보고 있는지 — 고른 분야 / 그 계열 / 전체 */
+  const sc = (k, label, num) => `<button class="chip" data-us="${k}" aria-pressed="${k === st.scope}">${esc(label)}<span class="c">${num}</span></button>`;
+  const fLabel = (st.fields || []).join(' · ');
+  const gLabel = (st.gys || []).join('·') + ' 계열';
+  const scopeBar = !(st.fields || []).length ? '' : `<div class="uscope"><span class="lb">보는 범위</span>
+    ${st.nField ? sc('field', fLabel, st.nField) : ''}${st.nGy && st.nGy !== st.nField ? sc('gy', gLabel, st.nGy) : ''}${sc('all', '전체', st.nAll)}
+    <span class="fine">${st.scope === 'field' ? '고른 분야의 모집단위만 봅니다.'
+      : (st.scope === 'gy'
+        ? `${esc(fLabel)}${josa(fLabel, '은', '는')} 권장과목을 낸 대학이 ${st.nField}곳뿐이라 <b>${esc(gLabel)} 전체</b>로 넓혀 보여 줍니다.`
+        : '권장과목을 낸 모든 모집단위를 봅니다.')}</span></div>`;
+
   /* 어느 대학이 있고 없는지를 먼저 말해 둡니다 — 「연세대 경영이 왜 안 나오지」가 가장 흔한 질문입니다. */
   const cov = st.coverage || {};
   const absent = (cov.absent || []).length ? `<b>${cov.absent.map(esc).join('·')}</b>는 권장과목을 공개하지 않아 이 표에 없습니다.` : '';
@@ -1068,9 +1079,10 @@ export function selUnits(res, st) {
       <div class="u1 c"><div class="v">${c.none}</div><div class="k">과목을 지정하지 않음</div></div>
     </div>
 
+    ${scopeBar}
     <div class="ubar">${chip('all', '전체', res.length)}${chip('full', '이미 충족', c.full)}${chip('later', '더 들으면 충족', c.later)}${chip('no', '없는 과목 요구', c.no)}${chip('none', '기준 없음', c.none)}
       <input type="search" id="uq" placeholder="대학·학과 찾기">
-      <span class="fine">우리 학교 지원이 많은 대학 순 · ${st.nUniv || 47}개 대학 ${res.length}개 모집단위</span></div>
+      <span class="fine">우리 학교 지원이 많은 대학 순 · ${new Set(res.map(r => univKey(r.u))).size}개 대학 ${res.length}개 모집단위</span></div>
 
     <div class="tbl-wrap"><table class="utbl">
       <thead><tr><th>대학</th><th>모집단위</th><th>대학이 지정한 과목</th><th>판정</th></tr></thead>
