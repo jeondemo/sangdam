@@ -263,12 +263,25 @@ export function planFor(sel, picked, grade, taken) {
   const areaOf = g => [...new Set(g.subs.map(s => sel.school.area[s]).filter(Boolean))].join('·');
   const sems = {};
   const free = [];
-  /* 등급·대학 수가 같으면 계열에 맞는 교과를 앞에 — 자연·공학·의약은 과학, 나머지는 사회 */
-  const pref = picked.some(f => ['자연', '공학', '의약'].includes(f.gy)) ? '과학' : '사회';
+  /* 이 분야가 과학 쪽인지 사회 쪽인지 — 계열 이름이 아니라 실제로 지정된 과목으로 가립니다.
+     「교육」처럼 이름만으로는 갈리지 않는 계열이 있어서입니다(국어교육과 물리교육은 정반대). */
+  const weigh = a => picked.reduce((n, f) => Math.max(n, ...Object.entries(f.subs)
+    .map(([k, v]) => (v.t === 'core' && sel.school.area[k] === a ? v.n : 0))), 0);
+  const wS = weigh('과학'), wH = weigh('사회');
+  /* 한쪽이 두 곳 이상 앞설 때만 그쪽으로 보고, 엇비슷하면 계열 이름으로 갈라 둡니다.
+     (강원대 한 곳이 미술에 과학을 적었다고 미술을 이과로 볼 수는 없습니다) */
+  const pref = wS - wH >= 2 ? '과학' : (wH - wS >= 2 ? '사회' : (isSci(picked) ? '과학' : '사회'));
   const by = (a, b) => TIER_RANK[a.m.t] - TIER_RANK[b.m.t] || (b.m.n || 0) - (a.m.n || 0)
     || (sel.school.area[b.s] === pref) - (sel.school.area[a.s] === pref);
+  /* 근거가 한 곳뿐인데 계열과 반대편 교과인 과목은 추천 자리에 올리지 않습니다 —
+     경영 분야의 물리학(기술경영 모집단위 한 곳)처럼, 한 줄짜리 근거가 그 계열 학생에게
+     「이 과목을 들으라」로 읽히면 곤란합니다. 「나머지」 줄에 근거 수와 함께 그대로 남습니다. */
+  const off = pref === '사회' ? '과학' : '사회';
+  const offbeat = r => sel.school.area[r.s] === off
+    && (r.m.n < 2 || r.m.t === 'gen' || r.m.t === 'genrec');
   for (const g of G) {
-    const direct = g.subs.map(s => ({ s, m: mergeSub(picked, s), area: '' })).filter(r => r.m).sort(by);
+    const direct = g.subs.map(s => ({ s, m: mergeSub(picked, s), area: '' }))
+      .filter(r => r.m && !offbeat(r)).sort(by);
     /* 이름으로 맞춘 과목이 하나도 없는 묶음만 교과(군) 지정으로 채웁니다 — 근거 대학 둘 이상일 때만 */
     const viaArea = direct.length ? [] : g.subs
       .map(s => { const m = areaMatch(picked, sel, s); return m && m.n >= 2 ? { s, m, area: m.area } : null; }).filter(Boolean).sort(by);

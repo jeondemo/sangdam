@@ -471,7 +471,7 @@ export function fieldList(sel, picked, q) {
   const by = {};
   for (const n of sel.order) { const f = sel.fields[n]; (by[f.gy] = by[f.gy] || []).push(f); }
   let h = '';
-  for (const gy of ['인문', '사회', '교육', '자연', '공학', '의약', '예체능']) {
+  for (const gy of ['인문', '사회', '교육', '자연', '공학', '의약', '예체능', '자유전공']) {
     const list = (by[gy] || []).filter(f => !q || f.name.includes(q));
     if (!list.length) continue;
     h += `<div class="gy">${esc(gy)}</div>`;
@@ -515,7 +515,7 @@ function guidePane(f, sel, st) {
   if (s.areas.length) p.push(`교과로는 ${s.areas.map(([k, v]) => `<b>${esc(k)}</b>(${v.n}곳)`).join(', ')}을 봅니다.`);
   if (s.already.length) p.push(`이 중 ${s.already.map(([k]) => esc(k)).join('·')}은 우리 학교에서 전원이 이미 듣습니다.`);
   if (s.topick.length) p.push(`직접 골라야 하는 것은 ${s.topick.map(([k, v]) =>
-    `<b>${esc(k)}</b> <span class="fine">(${v.n}곳 · ${esc(WHERE[k] || '')})</span>`).join(', ')}입니다.`);
+    `<b>${esc(k)}</b> <span class="fine">(${v.n}곳 · ${WHERE[k] ? esc(WHERE[k]) : '우리 학교에 없음'})</span>`).join(', ')}입니다.`);
   if (!p.length) p.push('대학이 이름으로 지정한 과목이 없습니다. 아래 갈래를 참고해 진로에 맞게 고르면 됩니다.');
   const see = [`<p>${p.join(' ')}</p>`];
   if (f.snu) {
