@@ -42,7 +42,7 @@ const S = {
 };
 
 /* 과목 선택 화면의 상태 */
-const SEL = { picked: [], grade: 1, chosen: new Set(), openG: new Set(), sumOpen: false, guideOpen: false, stu: null,
+const SEL = { picked: [], grade: 1, chosen: new Set(), openG: new Set(), sumOpen: false, guideOpen: false, recTab: {}, stu: null,
   uFilter: 'all', uQ: '' };
 let uApps = null;   // 대학 이름 → 우리 학교 6개년 지원 건수
 
@@ -544,7 +544,7 @@ function runSel() {
   const taken = (SEL.grade === 2 && SEL.stu) ? SEL.stu.taken : null;
   $('s-pick').innerHTML = R.selPanel(S.sel, {
     picked: SEL.picked, grade: SEL.grade, chosen: SEL.chosen, taken,
-    choice: S.choice, sumOpen: SEL.sumOpen, guideOpen: SEL.guideOpen, openG: SEL.openG, stu: SEL.stu,
+    choice: S.choice, sumOpen: SEL.sumOpen, guideOpen: SEL.guideOpen, openG: SEL.openG, recTab: SEL.recTab, stu: SEL.stu,
   });
   const sb = selSubs();
   $('s-pick').insertAdjacentHTML('beforeend', R.selGoBar(sb.chosen.length, sb.taken.length));
@@ -1393,15 +1393,16 @@ $('selq').addEventListener('input', () => {
   if (S.sel) $('selfbox').innerHTML = R.fieldList(S.sel, SEL.picked, ($('selq').value || '').trim());
 });
 bindChips('selgrade', b => {
-  SEL.grade = +b.dataset.g; SEL.chosen.clear(); SEL.openG.clear();
+  SEL.grade = +b.dataset.g; SEL.chosen.clear(); SEL.openG.clear(); SEL.recTab = {};
   if (SEL.grade !== 2) SEL.stu = null;
   selPaint();
 });
-$('selcls').addEventListener('change', () => { SEL.stu = null; fillSelStudents(); runSel(); });
+$('selcls').addEventListener('change', () => { SEL.stu = null; SEL.recTab = {}; fillSelStudents(); runSel(); });
 $('selstu').addEventListener('change', () => {
   const v = $('selstu').value;
   const [c, no] = v ? v.split('-').map(Number) : [];
   SEL.stu = v ? (S.choice?.students || []).find(x => x.cls === c && x.no === no) || null : null;
+  SEL.recTab = {};                       /* 학생이 바뀌면 「가장 가까운 안」이 다시 잡히도록 */
   runSel();
 });
 document.querySelectorAll('#seltabs .tab').forEach(t => t.addEventListener('click', () => {
@@ -1416,6 +1417,8 @@ $('s-pick').addEventListener('click', e => {
   if (tog) { SEL.sumOpen = !SEL.sumOpen; return runSel(); }
   const gtog = e.target.closest('.moretog[data-guide]');
   if (gtog) { SEL.guideOpen = !SEL.guideOpen; return runSel(); }
+  const rtab = e.target.closest('.rtab[data-rec]');
+  if (rtab) { SEL.recTab[rtab.dataset.rec] = +rtab.dataset.i; return runSel(); }
   if (e.target.closest('#btn-univ')) { selTab('univ'); toTop($('seltabs')); }
 });
 $('s-univ').addEventListener('click', e => {

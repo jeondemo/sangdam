@@ -2,7 +2,7 @@
 
 import { isPass, JUDGE } from './match.js';
 import { TIER_NAME, TIER_RANK, mergeSub, feasible, summaryOf, whereOf,
-  sciProgress, isSci, overCore, groupsFor, univKey, semLabel, planFor, PREREQ, parsePlan } from './subject.js';
+  sciProgress, isSci, overCore, groupsFor, univKey, semLabel, planFor, PREREQ, parsePlan, clashPairs } from './subject.js';
 
 /* 학급 코드는 306처럼 「학년+반」 세 자리입니다. 화면에는 「3학년 6반」으로 풉니다. */
 export const clsLabel = c => (c >= 100 ? `${Math.floor(c / 100)}학년 ${c % 100}반` : `${c}반`);
@@ -553,7 +553,7 @@ function guidePane(f, sel, st) {
   const miss = (f.guide?.miss || []).map(t => `<li>${gline(t)}</li>`);
 
   /* ④ 추천하는 과목 구성 — 「분야안내」 시트 E칸. 학생이 골라져 있으면 이미 들은 것·안 들은 것을 표시합니다. */
-  const rec = recPlans(f, sel, grade, st.stu);
+  const rec = recPlans(f, sel, grade, st.stu, st.recTab?.[f.name], st.choice);
   const src = `근거 — 대교협 2028 권장과목 ${f.nOwn + f.nGen}개 모집단위(「대학별 원문」 탭)` + (f.snu ? ` · ${SNU_SRC}` : '') + (f.guide?.src ? ` · ${esc(f.guide.src)}` : '');
 
   const body = `<div class="gsec"><div class="gh">① 대학이 보는 것</div>${see.join('')}</div>`
@@ -569,42 +569,117 @@ function guidePane(f, sel, st) {
 }
 const SNU_SRC = '서울대 2028 전공 연계 교과 안내';
 
-function recPlans(f, sel, grade, stu) {
+/* ④ 추천하는 과목 구성 — 안이 여럿이면 탭으로 보여 줍니다.
+   추천 1이 기준이고, 2·3은 추천 1에서 바뀐 과목만 주황색으로 표시합니다.
+   2학년 학생을 골랐으면 실제 이수와 가장 가까운 안을 알려 주되,
+   두 과목 이상 앞설 때만 — 비슷비슷하면 아무것도 고르지 않습니다. */
+function recPlans(f, sel, grade, stu, cur, choice) {
   const plans = parsePlan(f.guide?.plan, sel);
   if (!plans.length) return '';
   const TK = stu ? new Set(stu.taken || []) : null;
   const common = new Set(sel.school.common.map(c => c.s));
   const now = grade === 1 ? '2' : '3';                       // 지금 고르는 학년
   const pickOf = (sem, g) => sel.school.groups.find(x => x.sem === sem && x.g === g)?.pick;
-  return plans.map((p, i) => {
-    const rows = i === 0 ? p.rows : p.rows.filter(r => p.own.includes(r.sem + '|' + r.g));
-    const sems = [...new Set(rows.map(r => r.sem))].sort();
-    const taken = new Set([...common, ...(TK || [])]);
-    const cols = sems.map(sem => {
-      const semNo = sem.split('-')[1] || '1', past = sem[0] < now, dim = sem[0] !== now;
-      const lines = rows.filter(r => r.sem === sem).map(r => {
-        const chips = r.subs.map(alts => {
-          const label = alts.map(esc).join(' / ');
-          let cls = 'rec', tail = '';
-          if (TK && past) {                                    // 이미 지난 학기 — 들었는지
-            if (alts.some(x => TK.has(x))) { cls += ' done'; tail = '<i>✓ 이수</i>'; }
-            else { cls += ' skip'; tail = '<i>안 들음</i>'; }
-          } else if (TK) {                                     // 앞으로 고를 학기 — 앞 단계를 실제로 들었는지
-            const pre = PREREQ[alts[0]];
-            if (pre && !taken.has(pre)) { cls += ' gapped'; tail = `<i class="gap">2학년 ${esc(pre)} 안 들음</i>`; }
-          }
-          return `<span class="pc ${cls}">${label}${tail}</span>`;
-        }).join('');
-        const pk = pickOf(sem, r.g);
-        return `<div class="plg"><small>${esc(r.g)}묶음${pk ? ' 택' + pk : ''}</small>${chips}</div>`;
+  const gkey = r => r.sem + '|' + r.g;
+  const firstOf = r => r.subs.map(a => a[0]);
+
+  /* 추천 1과 견주어 바뀐 과목 찾기 */
+  const base = {};
+  for (const r of plans[0].rows) base[gkey(r)] = firstOf(r);
+  const diffOf = p => p.rows.map(r => {
+    const b = base[gkey(r)] || [], mine = firstOf(r);
+    return { sem: r.sem, g: r.g, add: mine.filter(x => !b.includes(x)), del: b.filter(x => !mine.includes(x)) };
+  }).filter(d => d.add.length || d.del.length);
+
+  /* 학생이 실제 들은 과목과 가장 가까운 안 — 두 과목 이상 앞설 때만 */
+  let near = -1;
+  if (TK && grade === 2 && plans.length > 1) {
+    const score = plans.map(p => p.rows.filter(r => r.sem[0] === '2')
+      .reduce((n, r) => n + r.subs.filter(a => a.some(x => TK.has(x))).length, 0));
+    const rank = [...score].sort((a, b) => b - a);
+    if (rank[0] >= 2 && rank[0] - rank[1] >= 2) near = score.indexOf(rank[0]);
+  }
+  const i0 = Math.min(Math.max(cur != null ? cur : (near >= 0 ? near : 0), 0), plans.length - 1);
+  const p = plans[i0], diffs = i0 === 0 ? [] : diffOf(p);
+  const was = {};                                            // 이 칸이 추천 1에서는 무엇이었는지
+  /* 한 묶음에서 한 과목만 바뀐 때만 「추천 1 : ○○」을 붙입니다 —
+     여러 개가 한꺼번에 바뀌면 어느 것이 어느 것을 대신했는지 알 수 없어 짝을 지으면 오히려 틀립니다. */
+  for (const d of diffs) if (d.add.length === 1 && d.del.length === 1) was[gkey(d) + '|' + d.add[0]] = d.del[0];
+
+  const sems = [...new Set(p.rows.map(r => r.sem))].sort();
+  const taken = new Set([...common, ...(TK || [])]);
+  const cols = sems.map(sem => {
+    const semNo = sem.split('-')[1] || '1', past = sem[0] < now, dim = sem[0] !== now;
+    const lines = p.rows.filter(r => r.sem === sem).map(r => {
+      const chips = r.subs.map(alts => {
+        const label = alts.map(esc).join(' / ');
+        let cls = 'rec', tail = '';
+        if (i0 > 0 && diffs.some(d => gkey(d) === gkey(r) && d.add.includes(alts[0]))) {
+          cls += ' chg';
+          const w = was[gkey(r) + '|' + alts[0]];
+          if (w) tail = `<i>추천 1 : ${esc(w)}</i>`;
+        }
+        if (TK && past) {                                    // 이미 지난 학기 — 들었는지
+          if (alts.some(x => TK.has(x))) { cls += ' done'; tail = '<i>✓ 이수</i>'; }
+          else { cls += ' skip'; tail = '<i>안 들음</i>'; }
+        } else if (TK) {                                     // 앞으로 고를 학기 — 앞 단계를 실제로 들었는지
+          const pre = PREREQ[alts[0]];
+          if (pre && !taken.has(pre)) { cls += ' gapped'; tail = `<i class="gap">2학년 ${esc(pre)} 안 들음</i>`; }
+        }
+        return `<span class="pc ${cls}">${label}${tail}</span>`;
       }).join('');
-      return `<div class="pl r s${semNo}${dim ? ' dim' : ''}"><div class="plh">${esc(semLabel(sem))}${past && TK ? '<small>이미 지남</small>' : ''}</div>${lines}</div>`;
-    });
-    const notes = p.notes.map(n => `<div class="pln">※ ${esc(n)}</div>`).join('');
-    const errs = p.errors.length ? `<div class="pln err">이 안은 편제표와 맞지 않는 곳이 있습니다 — ${p.errors.map(esc).join(' · ')}</div>` : '';
-    return `<div class="rplan"><div class="rph"><b>${esc(p.title)}</b><span class="gt src2">추천안</span></div>
-      <div class="plan c${Math.min(cols.length, 4)}">${cols.join('')}</div>${notes}${errs}</div>`;
-  }).join('');
+      const pk = pickOf(sem, r.g);
+      return `<div class="plg"><small>${esc(r.g)}묶음${pk ? ' 택' + pk : ''}</small>${chips}</div>`;
+    }).join('');
+    return `<div class="pl r s${semNo}${dim ? ' dim' : ''}"><div class="plh">${esc(semLabel(sem))}${past && TK ? '<small>이미 지남</small>' : ''}</div>${lines}</div>`;
+  });
+
+  const tabs = plans.length < 2 ? '' : `<div class="rtabs">${plans.map((x, k) => {
+    const m = /^(.*?)\s*·\s*(.*)$/.exec(x.title);
+    const nm = m ? `<b>${esc(m[1])}</b> · ${esc(m[2])}` : `<b>${esc(x.title)}</b>`;
+    return `<button class="rtab${k === i0 ? ' on' : ''}" data-rec="${esc(f.name)}" data-i="${k}">${nm}`
+      + (k === near ? '<span class="near">이 학생과 가장 가까움</span>' : '') + '</button>';
+  }).join('')}</div>`;
+  const nDiff = diffs.reduce((n, d) => n + Math.max(d.add.length, d.del.length), 0);
+  const diffLine = nDiff ? `<div class="rdiff"><b>추천 1과 다른 과목 ${nDiff}개</b> — ${diffs.map(d =>
+    `${esc(semLabel(d.sem))} ${d.del.map(esc).join('·') || '없음'} → ${d.add.map(esc).join('·') || '없음'}`).join(' · ')}</div>` : '';
+  const one = plans.length < 2 ? `<div class="rph"><b>${esc(p.title)}</b><span class="gt src2">추천안</span></div>` : '';
+  const notes = p.notes.map(n => `<div class="pln">※ ${esc(n)}</div>`).join('');
+
+  /* 추천안이 손대지 않은 묶음 — 학생이 따로 골라야 하는 칸이라 빠뜨리지 않게 알려 둡니다 */
+  const has = new Set(p.rows.map(r => r.sem + '|' + r.g));
+  const restBy = {};
+  for (const g of sel.school.groups)
+    if (sems.includes(g.sem) && !has.has(g.sem + '|' + g.g)) (restBy[g.sem] = restBy[g.sem] || []).push(g.g);
+  const restTxt = Object.keys(restBy).sort().map(k => `${semLabel(k)} ${restBy[k].sort().join('·')}묶음`).join(' · ');
+  /* 서울대 유형①은 제2외국어·한문 한 과목이면 채워집니다 — 추천안에 그 과목이 없을 때만 덧붙입니다 */
+  const t1 = (f.snu || '').includes('①')
+    && !p.rows.flatMap(r => r.subs.flat()).some(x => ['제2외국어', '한문'].includes(sel.school.area[x]));
+  const rest = restTxt
+    ? `<div class="pln">여기 적지 않은 ${esc(restTxt)}은 이 분야와 직접 관계가 없어 진로·적성에 맞게 고르면 됩니다.`
+      + (t1 ? ' 다만 <b>서울대 유형①(제2외국어·한문 1과목)</b>은 C묶음에서 채워집니다.' : '') + '</div>'
+    : (t1 ? '<div class="pln"><b>서울대 유형①(제2외국어·한문 1과목)</b>은 C묶음에서 채워집니다.</div>' : '');
+  /* 올해 시간표로 함께 들을 수 있는 조합인지 — 내년 시간표는 아직 없어 참고용입니다.
+     선택 명단이 올라와 있는 학기(올해 2학년)만 확인할 수 있습니다. */
+  const clash = [];
+  for (const sem of sems) {
+    const T = choice?.sem?.[sem]?.time;
+    if (!T) continue;
+    const tOf = s => {
+      const out = [];
+      for (const g of Object.values(T)) for (const [t, m] of Object.entries(g)) if (m && m[s] != null) out.push(t);
+      return [...new Set(out)];
+    };
+    const list = [...new Set(p.rows.filter(r => r.sem === sem).flatMap(r => r.subs.map(a => a[0])))].filter(s => tOf(s).length);
+    if (list.length < 2 || feasible(tOf, list)) continue;
+    const pairs = clashPairs(tOf, list);
+    clash.push(`${semLabel(sem)} ` + (pairs.length ? pairs.map(x => x.join('·')).join(', ') : list.join('·')));
+  }
+  const clashLine = clash.length
+    ? `<div class="pln err">올해 시간표로는 <b>${clash.map(esc).join(' · ')}</b>를 함께 들을 수 없었습니다 — 같은 타임입니다.`
+      + ' <span class="fine">(내년 시간표는 아직 정해지지 않았습니다)</span></div>' : '';
+  const errs = p.errors.length ? `<div class="pln err">이 안은 편제표와 맞지 않는 곳이 있습니다 — ${p.errors.map(esc).join(' · ')}</div>` : '';
+  return `<div class="rplan">${tabs}${one}${diffLine}<div class="plan c${Math.min(cols.length, 4)}">${cols.join('')}</div>${notes}${rest}${clashLine}${errs}</div>`;
 }
 const PREREQ_NAME = s => PREREQ[s] || '';
 

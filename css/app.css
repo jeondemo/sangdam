@@ -820,3 +820,24 @@ table.jgtbl td.b{font-weight:700}
 .pln.err{color:var(--pass);font-weight:700}
 @media (max-width:1100px){.plan.c4{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:900px){.plan.c4{grid-template-columns:minmax(0,1fr)}}
+
+/* ④ 추천 탭 */
+.rtabs{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:2px 0 9px}
+.rtab{border:1.5px solid #dfe5f2;background:#fff;border-radius:99px;padding:5px 14px;font-size:12.5px;
+  font-weight:700;color:#66748c;cursor:pointer;display:flex;align-items:center;gap:6px;line-height:1.5;font-family:inherit}
+.rtab b{font-weight:800;color:#43506b}
+.rtab:hover{border-color:#b9c6e4}
+.rtab.on{background:#efeafc;border-color:#a894ec;color:#3e2f8a}
+.rtab.on b{color:#3e2f8a}
+.rtab .near{font-size:10px;font-weight:800;background:#e4f4ea;color:#2c7a4d;border-radius:99px;padding:1px 7px}
+.rdiff{font-size:11.5px;color:#5b6b83;line-height:1.6;margin:0 0 8px;padding-left:2px}
+.rdiff b{color:#3e2f8a}
+.pc.rec.chg{background:#fff5e8;border:1.5px solid #e0a860;color:#8a5300}
+.pc.rec.chg i{display:block;margin:1px 0 0;color:#a8672a;font-weight:700;opacity:1;font-size:10.5px}
+/* 학생을 골랐을 때는 「들었는지」가 먼저입니다 — 바뀐 과목 표시보다 이수 표시가 이깁니다 */
+.pc.rec.chg.done{background:#e4f4ea;border-color:#9fd3b4;color:#1f6b3d}
+.pc.rec.chg.done i{color:#1f6b3d}
+.pc.rec.chg.skip{background:#fff;border:1.5px dashed #c3cbd8;color:#8a94a6;text-decoration:line-through}
+.pc.rec.chg.skip i{color:var(--pass);text-decoration:none}
+.pc.rec.chg.gapped{background:#fff5f5;border-color:var(--pass);color:var(--pass)}
+.pc.rec.chg.gapped i{color:var(--pass)}
