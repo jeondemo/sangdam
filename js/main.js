@@ -226,21 +226,74 @@ async function readMockFile(file) {
   return parseMockExam(text);
 }
 
+/* 모의고사는 학년별로 따로 둡니다. 올린 파일의 학년만 바뀌고 다른 학년은 그대로입니다.
+   같은 학년 안에서는 같은 시험(연도·월·기관)이면 반을 합치고, 시험이 바뀌면(6월 → 9월) 그 학년을 통째로 바꿉니다. */
+const gradeOfClass = c => Math.floor(Number(c) / 100);
+const gradeLabel = m => `${m.grade}학년${m.month ? ` ${m.month}월` : ''}${m.org ? ` ${m.org}` : ''}`;
+
+function buildMock(sets) {
+  const grades = Object.keys(sets).map(Number).filter(g => sets[g]?.students?.length).sort();
+  if (!grades.length) return null;
+  const students = grades.flatMap(g => sets[g].students).sort((a, b) => (a.c - b.c) || (a.no - b.no));
+  const byGrade = {}; for (const g of grades) byGrade[g] = sets[g].meta;
+  const one = k => { const v = new Set(grades.map(g => sets[g].meta[k]).filter(Boolean)); return v.size === 1 ? [...v][0] : null; };
+  const month = one('month'), org = one('org');
+  const label = `${grades.join('·')}학년${month ? ` ${month}월` : ''}${org ? ` ${org}` : ''}`;
+  const loadedAt = Math.max(...grades.map(g => sets[g].meta.loadedAt || 0));
+  return { sets, students, meta: { n: students.length, label, grade: grades.length === 1 ? grades[0] : null, grades, month, org, byGrade, loadedAt } };
+}
+
+/* 예전 판(학년별 보관 전)으로 저장된 명단을 학년별 묶음으로 바꿉니다 */
+function upgradeMock(m) {
+  if (!m?.students?.length) return null;
+  if (m.sets) return buildMock(m.sets);
+  const sets = {};
+  for (const st of m.students) {
+    const g = gradeOfClass(st.c); if (!g) continue;
+    (sets[g] ||= { students: [], meta: { ...(m.meta.byGrade?.[g] || m.meta), grade: g, loadedAt: m.meta.loadedAt } }).students.push(st);
+  }
+  for (const g in sets) { sets[g].meta.n = sets[g].students.length; sets[g].meta.label = gradeLabel(sets[g].meta); }
+  return buildMock(sets);
+}
+
+async function saveMock() {
+  if (keepChecked() && S.mock) await store.set(store.KEY_MOCK, S.mock); else await store.del(store.KEY_MOCK);
+}
+
 async function loadMock(files) {
   try {
-    let merged = null;
+    const sets = { ...(S.mock?.sets || {}) };
     for (const f of files) {
       const one = await readMockFile(f);
       if (!one.students.length) throw new Error(`${f.name} 에서 학생을 찾지 못했습니다.`);
-      merged = merged ? mergeMockExam(merged, one) : one;
+      const ex = examInfo(f.name, one.students);
+      /* 파일 하나에 학년이 섞여 있어도 학번으로 갈라 각 학년 자리에 넣습니다 */
+      const split = {};
+      for (const st of one.students) { const g = gradeOfClass(st.c); if (g) (split[g] ||= []).push(st); }
+      if (!Object.keys(split).length) throw new Error(`${f.name} 의 학급 번호에서 학년을 알 수 없습니다.`);
+      for (const g of Object.keys(split).map(Number)) {
+        const prev = sets[g];
+        const same = prev && prev.meta.month === ex.month && prev.meta.org === ex.org && prev.meta.year === ex.year;
+        const list = same ? mergeMockExam(prev, { students: split[g] }).students : split[g];
+        sets[g] = { students: list, meta: { ...ex, grade: g, n: list.length, loadedAt: Date.now() } };
+      }
     }
-    Object.assign(merged.meta, examInfo(files[0].name, merged.students));
-    S.mock = merged;
-    if (keepChecked()) await store.set(store.KEY_MOCK, merged); else await store.del(store.KEY_MOCK);
+    S.mock = buildMock(sets);
+    await saveMock();
     showApp('jg');
   } catch (e) {
     screenUpload('모의고사 성적표를 읽지 못했습니다 — ' + e.message);
   }
+}
+
+/* 사이드바의 학년별 「지우기」 — 그 학년만 뺍니다 */
+async function dropMockGrade(g) {
+  if (!S.mock?.sets?.[g]) return;
+  const sets = { ...S.mock.sets }; delete sets[g];
+  S.mock = buildMock(sets);
+  await saveMock();
+  if (S.mock) { showApp(S.mode); return; }
+  if (S.roster) showApp('susi'); else screenUpload();
 }
 
 /* ── 상담 화면 ─────────────────────────────────────── */
@@ -261,7 +314,8 @@ function showApp(mode) {
   $('sb-scope').innerHTML =
     `<div class="row"><span>지원결과</span><b>지원 ${m.nApps.toLocaleString()}건</b></div>` +
     (S.roster ? `<div class="row"><span>${gl(S.roster)} 학생부${when(S.roster)}${S.roster.meta.stale ? '<i class="when old">예전 판으로 읽힘 · 다시 올려 주세요</i>' : ''}</span><b class="off">${S.roster.meta.n}명</b></div>` : '') +
-    (S.mock ? `<div class="row"><span>${esc(S.mock.meta.label || '모의고사')}${when(S.mock)}</span><b class="off">${S.mock.meta.n}명</b></div>` : '');
+    (S.mock ? (S.mock.meta.grades || []).map(g => { const st = S.mock.sets[g];
+      return `<div class="row mockg"><span>${esc(gradeLabel(st.meta))}${when(st)}</span><b class="off">${st.meta.n}명<button class="xg" data-mockdel="${g}" title="${g}학년 모의고사 지우기" aria-label="${g}학년 모의고사 지우기">×</button></b></div>`; }).join('') : '');
   $('m-susi').textContent = S.roster ? `${gl(S.roster)} ${S.roster.meta.n}명`.trim() : '명단 없음';
   $('m-jg').textContent = S.mock ? (S.mock.meta.label || `${S.mock.meta.n}명`) : '명단 없음';
   $('c-mode-sel').classList.toggle('hidden', !S.sel);
@@ -357,6 +411,8 @@ function fillStudents() {
 }
 
 /* 명단의 같은 학생(학급·번호)을 다른 명단에서 찾습니다 — 학생부 학생의 모의고사 등급을 같이 채울 때 씁니다. */
+/* 학생이 속한 학년의 시험 정보. 여러 학년을 같이 올렸으면 그 학년 것, 아니면 전체 것. */
+const examOf = stu => (stu?.c != null && S.mock?.meta?.byGrade?.[gradeOfClass(stu.c)]) || S.mock?.meta;
 const sameStudent = (list, s) => (list || []).find(x => x.c === s.c && x.no === s.no && x.nm === s.nm) || null;
 
 function onStudentChange() {
@@ -368,8 +424,7 @@ function onStudentChange() {
   if (!S.cur) return run();
   if (S.mode === 'jg') {
     /* 순위는 파일에 적힌 학년 순위이므로, 1·2학년을 같이 올렸어도 같은 학년 인원으로 나눕니다 */
-    const gOf = c => Math.floor(Number(c) / 100);
-    const nSame = S.mock.students.filter(x => gOf(x.c) === gOf(S.cur.c)).length || S.mock.meta.n;
+    const nSame = S.mock.sets?.[gradeOfClass(S.cur.c)]?.meta.n || S.mock.meta.n;
     $('stucard').innerHTML = R.mockCard(S.cur, nSame);
     const p = S.cur.pct, g = S.cur.grade;
     $('p_k').value = p.k ?? ''; $('p_m').value = p.m ?? '';
@@ -481,7 +536,7 @@ function runJeongsi() {
   $('rtitle').textContent = S.cur ? `${S.cur.nm} · 정시 유사 사례` : '정시 유사 사례';
   $('rnote').textContent = `백분위 평균 ${lo.toFixed(0)}~${hi.toFixed(0)} 구간 졸업생 ${sel.length}명 · 정시 지원만`;
   $('stats').innerHTML = R.jeongsiStatBar(sel, sum);
-  $('headline').innerHTML = R.jeongsiHeadline(sum, sel, pct, eng, S.cur?.nm, groups, S.mock?.meta);
+  $('headline').innerHTML = R.jeongsiHeadline(sum, sel, pct, eng, S.cur?.nm, groups, examOf(S.cur));
   S.cases = R.buildCases(sel, rows, 'jg');
   $('p-stu').innerHTML = R.jeongsiStudents(S.cases);
   applyCaseFilter();
@@ -509,7 +564,7 @@ function runJeongsi() {
     nJg = jgRes.filter(r => r.judge === '적정').length;
   } else if (S.cut) {
     const pl = placement(S.cut, { pct, eng, myGrade, gy: selGy, similarRows: sum.jg, school: S.school });
-    $('p-jg').innerHTML = R.placementTable(pl, { exam: S.mock?.meta, cutMeta: S.cut.meta });
+    $('p-jg').innerHTML = R.placementTable(pl, { exam: examOf(S.cur), cutMeta: S.cut.meta });
     nJg = pl.list.length;
   } else $('p-jg').innerHTML = '';
   finish(sel, { univ: uni.length, jg: nJg });
@@ -1297,14 +1352,15 @@ async function boot() {
   }
 
   S.roster = await store.get(store.KEY_ROSTER);
-  S.mock = await store.get(store.KEY_MOCK);
+  S.mock = upgradeMock(await store.get(store.KEY_MOCK));
   if (!S.roster?.students?.length) S.roster = null;
-  if (!S.mock?.students?.length) S.mock = null;
   /* 프로그램이 새로워졌는데 명단은 예전 판으로 읽혀 남아 있으면 — 다시 올리라고 알립니다. */
   if (S.roster && S.roster.meta.pv !== ROSTER_PV) S.roster.meta.stale = true;
-  if (S.roster || S.mock) showApp(S.roster ? 'susi' : 'jg');
-  if (S.roster?.meta.stale) setTimeout(() => toast('프로그램이 새로워졌습니다 — 학생부성적표를 다시 올리면 새 표시(5등급 등)가 나옵니다.'), 800);
-  else screenUpload();
+  /* 저장해 둔 명단이 있으면 표지 없이 바로 상담 화면으로. (전에는 else 가 잘못 걸려 표지가 다시 덮었습니다) */
+  if (S.roster || S.mock) {
+    showApp(S.roster ? 'susi' : 'jg');
+    if (S.roster?.meta.stale) setTimeout(() => toast('프로그램이 새로워졌습니다 — 학생부성적표를 다시 올리면 새 표시(5등급 등)가 나옵니다.'), 800);
+  } else screenUpload();
 }
 
 /* ── 이벤트 ────────────────────────────────────────── */
@@ -1557,6 +1613,12 @@ $('btn-roster').addEventListener('click', () => {
   /* 성적표는 표지에서 올립니다 — 수시·정시와 정시만 모두 같은 자리로 보냅니다. */
   if (S.mode === 'sel') $('f-choice').click();
   else screenUpload();
+});
+$('sb-scope').addEventListener('click', e => {
+  const b = e.target.closest('[data-mockdel]'); if (!b) return;
+  const g = Number(b.dataset.mockdel);
+  if (!confirm(`${g}학년 모의고사 성적표를 이 컴퓨터에서 지웁니다. 다른 학년은 그대로 둡니다.\n계속할까요?`)) return;
+  dropMockGrade(g);
 });
 $('btn-wipe').addEventListener('click', async () => {
   if (!confirm('이 컴퓨터에 저장된 명단과 자료를 지웁니다.\n다음 접속 때 링크로 다시 받아옵니다.\n계속할까요?')) return;

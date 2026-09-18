@@ -194,6 +194,9 @@ button{font-family:inherit}
 .sb-scope .row span{white-space:nowrap}
 .sb-scope .row b{color:#f3f6fe;font-weight:700;text-align:right}
 .sb-scope .row .off{color:#dbb97f;font-weight:700}
+.sb-scope .row .xg{margin-left:6px;width:16px;height:16px;padding:0;border:1px solid rgba(160,180,235,.35);border-radius:4px;
+  background:transparent;color:#8d9ac0;font-size:11px;line-height:14px;cursor:pointer;vertical-align:1px}
+.sb-scope .row .xg:hover{color:#ffb4b4;border-color:#ffb4b4}
 /* 구역 제목·라벨은 작은 모니터에서 배경에 묻히지 않도록 크기를 올리고 불투명하게 둡니다. */
 .sbl{font-size:11px;letter-spacing:1.4px;color:#9fb0e0;font-weight:800;margin:18px 0 9px;
   display:flex;align-items:center;gap:9px}
