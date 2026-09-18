@@ -396,37 +396,63 @@ export function gradeWeights(students) {
   return { w: [w1, w2, w3], mae: err / rows.length, n: rows.length };
 }
 
-/* ── 2학년 모의고사 성적표 (교육청 영역별 기준) ─────────── */
+/* ── 모의고사 성적표 (교육청 영역별 기준) ─────────────── */
 
 /* 확장자는 .xls 이지만 실제로는 EUC-KR HTML 표입니다.
    한 파일에 한 반이 들어오는 경우가 많아 여러 파일을 합쳐 쓸 수 있게 합니다.
-   열 순서(31칸):
-   순위 학급 번호 이름 | 국어(과목 원 표 백 등) | 수학(과목 원 표 백 등) | 영어(원 등) | 한국사(원 등)
-   | 탐1(과목 원 표 백 등) | 탐2(과목 원 표 백 등) | 제2외국어(과목 원 등) */
+
+   머리글이 두 줄입니다. 첫 줄은 영역(국어·수학·영어·한국사·탐구1선택·탐구2선택·제2외국어)에
+   colspan 이 붙고, 둘째 줄이 그 안의 칸(과목·원점수·표준·백분위·등급)입니다.
+   학년에 따라 칸 구성이 다릅니다 — 2학년은 국어·수학에 「과목」 칸과 제2외국어 묶음이 있고(31칸),
+   1학년은 둘 다 없습니다(26칸). 그래서 자리를 세지 않고 머리글을 읽어 칸을 찾습니다. */
 export function parseMockExam(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const table = doc.querySelector('table');
   if (!table) return { students: [], meta: { n: 0 } };
 
-  const headText = [...table.querySelectorAll('th')].map(th => th.textContent.trim()).join(' ');
-  if (!/국어/.test(headText) || !/탐구/.test(headText)) return { students: [], meta: { n: 0 } };
+  const trs = [...table.querySelectorAll('tr')];
+  const heads = trs.filter(tr => tr.querySelector('th') && !tr.querySelector('td'));
+  const headText = heads.map(tr => tr.textContent).join(' ');
+  if (heads.length < 2 || !/국어/.test(headText) || !/탐구/.test(headText)) return { students: [], meta: { n: 0 } };
+
+  /* 머리글 두 줄을 펼쳐서 칸마다 { 영역, 칸 이름 } 을 만듭니다 */
+  const sub = [...heads[1].querySelectorAll('th')].map(th => th.textContent.trim());
+  const cols = []; let si = 0;
+  for (const th of heads[0].querySelectorAll('th')) {
+    const area = th.textContent.trim();
+    const span = Number(th.getAttribute('colspan')) || 1;
+    if ((Number(th.getAttribute('rowspan')) || 1) > 1) { cols.push({ area, f: area }); continue; }
+    for (let k = 0; k < span; k++) cols.push({ area, f: sub[si++] || '' });
+  }
+  const AREA = { k: /^국어/, m: /^수학/, e: /^영어/, h: /^한국사/, s1: /^탐구\s*1/, s2: /^탐구\s*2/ };
+  const at = (a, f) => cols.findIndex(c => AREA[a].test(c.area) && c.f === f);
+  const iC = cols.findIndex(c => c.f === '학급'), iNo = cols.findIndex(c => c.f === '번호'),
+        iNm = cols.findIndex(c => c.f === '이름'), iR = cols.findIndex(c => c.f === '순위');
+  if (iC < 0 || iNo < 0 || iNm < 0) return { students: [], meta: { n: 0 } };
+  const need = cols.length;
 
   const out = [];
-  for (const tr of table.querySelectorAll('tr')) {
+  for (const tr of trs) {
     const td = [...tr.querySelectorAll('td')].map(x => x.textContent.replace(/ /g, ' ').trim());
-    if (td.length < 28) continue;
-    const nm = clean(td[3]);
-    const c = num(td[1]), no = num(td[2]);
-    if (!nm || c == null || no == null) continue;
-    const g = (i) => { const v = num(td[i]); return v != null && v > 0 ? v : null; };
-    out.push({
-      r: num(td[0]), c, no, nm,
-      grade: { k: g(8), m: g(13), e: g(15), h: g(17), s1: g(22), s2: g(27) },
-      pct:   { k: g(7), m: g(12), s1: g(21), s2: g(26) },
-      std:   { k: g(6), m: g(11), s1: g(20), s2: g(25) },
-      raw:   { k: g(5), m: g(10), e: g(14), h: g(16), s1: g(19), s2: g(24) },
-      subj:  { s1: clean(td[18]), s2: clean(td[23]) },
-    });
+    if (td.length < need) continue;
+    /* 이름 칸이 비어 오는 줄이 가끔 있습니다(김영일 쪽 명단 누락). 학급·번호가 있으면 버리지 않습니다. */
+    const nm = clean(td[iNm]) || '(이름 없음)';
+    const c = num(td[iC]), no = num(td[iNo]);
+    if (c == null || no == null) continue;
+    const g = (i) => { if (i < 0) return null; const v = num(td[i]); return v != null && v > 0 ? v : null; };
+    const s = (i) => (i < 0 ? '' : clean(td[i]));
+    const pick = (f, keys) => Object.fromEntries(keys.map(k => [k, g(at(k, f))]));
+    const st = {
+      r: g(iR), c, no, nm,
+      grade: pick('등급', ['k', 'm', 'e', 'h', 's1', 's2']),
+      pct:   pick('백분위', ['k', 'm', 's1', 's2']),
+      std:   pick('표준', ['k', 'm', 's1', 's2']),
+      raw:   pick('원점수', ['k', 'm', 'e', 'h', 's1', 's2']),
+      subj:  { s1: s(at('s1', '과목')), s2: s(at('s2', '과목')) },
+    };
+    /* 안 본 과목은 등급 0 으로 오는데 표준점수만 50 으로 들어오는 경우가 있습니다. 등급이 없으면 못 본 것으로 봅니다. */
+    for (const k of ['k', 'm', 's1', 's2']) if (st.grade[k] == null) { st.std[k] = null; st.pct[k] = null; st.raw[k] = null; }
+    out.push(st);
   }
   out.sort((a, b) => (a.c - b.c) || (a.no - b.no));
   return { students: out, meta: { n: out.length, loadedAt: Date.now() } };
@@ -462,16 +488,19 @@ export function examInfo(filename, students) {
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
   if (top) grade = Number(top[0]);
   if (grade == null) { const m = name.match(/([1-3])\s*학년/); if (m) grade = Number(m[1]); }
+  /* 1·2학년 파일을 한꺼번에 올리면 학년이 섞입니다. 이름표에는 다 적습니다. */
+  const grades = Object.keys(counts).map(Number).sort();
 
   const month = (name.match(/(\d{1,2})\s*월/) || [])[1] || null;
   const org = /평가원/.test(name) ? '평가원' : /교육청/.test(name) ? '교육청' : /수능/.test(name) && !/모의/.test(name) && !month ? '수능' : null;
   const year = (name.match(/(20\d{2})\s*학년도/) || [])[1] || null;
 
   const parts = [];
-  if (grade) parts.push(`${grade}학년`);
+  if (grades.length > 1) parts.push(`${grades.join('·')}학년`);
+  else if (grade) parts.push(`${grade}학년`);
   if (month) parts.push(`${month}월`);
   if (org) parts.push(org);
-  return { grade, month, org, year, label: parts.join(' ') || null };
+  return { grade, grades, month, org, year, label: parts.join(' ') || null };
 }
 
 

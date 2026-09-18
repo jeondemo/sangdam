@@ -367,7 +367,10 @@ function onStudentChange() {
   S.cur = currentList().find(s => s.c === c && s.no === no) || null;
   if (!S.cur) return run();
   if (S.mode === 'jg') {
-    $('stucard').innerHTML = R.mockCard(S.cur, S.mock.meta.n);
+    /* 순위는 파일에 적힌 학년 순위이므로, 1·2학년을 같이 올렸어도 같은 학년 인원으로 나눕니다 */
+    const gOf = c => Math.floor(Number(c) / 100);
+    const nSame = S.mock.students.filter(x => gOf(x.c) === gOf(S.cur.c)).length || S.mock.meta.n;
+    $('stucard').innerHTML = R.mockCard(S.cur, nSame);
     const p = S.cur.pct, g = S.cur.grade;
     $('p_k').value = p.k ?? ''; $('p_m').value = p.m ?? '';
     $('p_s1').value = p.s1 ?? ''; $('p_s2').value = p.s2 ?? '';
@@ -398,10 +401,12 @@ let selGy = -1;
 /* 전문대 지원 기록은 데이터에 남아 있지만 화면에서는 4년제만 봅니다. */
 const includeVoc = false;
 
+let emptyDefault = null;
 function showEmpty(msg) {
   $('results').classList.add('hidden');
   $('placeholder').classList.remove('hidden');
-  if (msg) $('placeholder').innerHTML = msg;
+  if (emptyDefault == null) emptyDefault = $('placeholder').innerHTML;
+  $('placeholder').innerHTML = msg || emptyDefault;   /* 앞 학생의 안내문이 남지 않게 */
 }
 
 function run() {
@@ -456,7 +461,16 @@ function runSusi() {
 function runJeongsi() {
   const pct = { k: numOf('p_k'), m: numOf('p_m'), s1: numOf('p_s1'), s2: numOf('p_s2') };
   const filled = Object.values(pct).filter(v => v != null).length;
-  if (filled < 3) return showEmpty();
+  if (filled < 3) {
+    /* 명단에서 고른 학생인데 백분위가 모자라면 왜 못 보는지 말해 줍니다.
+       1학년 성적표는 반에 따라 국·수 백분위가 0 으로 들어오는 경우가 있습니다(김영일 쪽 자료 문제). */
+    if (S.cur?.pct) {
+      const miss = [['k', '국어'], ['m', '수학'], ['s1', '탐구1'], ['s2', '탐구2']].filter(([k]) => pct[k] == null).map(([, n]) => n);
+      return showEmpty(`이 학생 성적표에는 <b>${miss.join('·')} 백분위가 비어</b> 있어 정시 비교를 할 수 없습니다.<br>
+        <span class="fine">백분위는 국·수·탐 가운데 3개 이상 있어야 합니다. 김영일 사이트에서 성적표를 다시 내려받아 보거나, 위 칸에 직접 넣어도 됩니다.</span>`);
+    }
+    return showEmpty();
+  }
   const eng = numOf('p_e');
   const { sel, rows } = findSimilarJeongsi(S.index, { pct, eng, ...commonOpts() });
   if (!sel.length) return showEmpty('조건에 맞는 졸업생이 없습니다. 연도 범위나 계열 조건을 넓혀 보세요.');

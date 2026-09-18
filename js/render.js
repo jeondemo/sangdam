@@ -279,7 +279,8 @@ export function mockCard(st, total) {
   const g = st.grade, p = st.pct, s = st.std;
   const f = x => (x == null ? '—' : x);
   const avg = [p.k, p.m, p.s1, p.s2].filter(x => x != null);
-  const pa = avg.length ? (avg.reduce((a, b) => a + b, 0) / avg.length) : null;
+  /* 3개 미만이면 평균이라 부를 수 없습니다 — 비워 두고 아래 표에서 어느 칸이 없는지 보이게 합니다 */
+  const pa = avg.length >= 3 ? (avg.reduce((a, b) => a + b, 0) / avg.length) : null;
   const ss = [s.k, s.m, s.s1, s.s2].every(x => x != null) ? s.k + s.m + s.s1 + s.s2 : null;
   return `<div class="who">${esc(st.nm)}<small>${esc(clsLabel(st.c))} ${st.no}번</small></div>
     <div class="rk">${st.r != null ? `${st.r}위 / ${total}명 · ` : ''}백분위 평균 <b class="up">${pa != null ? pa.toFixed(1) : '—'}</b>${ss != null ? ` · 표점합 ${ss}` : ''}</div>
